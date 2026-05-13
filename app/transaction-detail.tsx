@@ -1,12 +1,16 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import React, { useEffect, useState } from 'react';
-import { ScrollView, Text, View } from 'react-native';
+import React, { useCallback, useEffect, useState } from 'react';
+import { Pressable, ScrollView, Text, View } from 'react-native';
+import { AddServiceSheet } from '../src/components/ui/AddServiceSheet';
+import { AddSparepartSheet } from '../src/components/ui/AddSparepartSheet';
 import { Badge } from '../src/components/ui/Badge';
 import { Button } from '../src/components/ui/Button';
 import { Card } from '../src/components/ui/Card';
 import { ConfirmDialog } from '../src/components/ui/ConfirmDialog';
+import { Input } from '../src/components/ui/Input';
 import { ScreenHeader } from '../src/components/ui/ScreenHeader';
+import { WhatsAppTemplateModal } from '../src/components/ui/WhatsAppTemplateModal';
 import { theme } from '../src/constants/theme';
 import { receiptService } from '../src/services/receiptService';
 import { transactionService } from '../src/services/transactionService';
@@ -20,16 +24,30 @@ export default function TransactionDetail() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const showToast = useAppStore((s) => s.showToast);
-  const { updateStatus, remove } = useTransactionStore();
+  const { updateStatus, remove, load: reloadList } = useTransactionStore();
   const [tx, setTx] = useState<Transaction | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [actionBusy, setActionBusy] = useState<'print' | 'wa' | null>(null);
+  const [waModalOpen, setWaModalOpen] = useState(false);
+  const [addServiceOpen, setAddServiceOpen] = useState(false);
+  const [addSparepartOpen, setAddSparepartOpen] = useState(false);
+  const [confirmRemoveItem, setConfirmRemoveItem] = useState<
+    { kind: 'service' | 'sparepart'; itemId: string; name: string } | null
+  >(null);
+  const [editMechanicNotes, setEditMechanicNotes] = useState(false);
+  const [editRecommendation, setEditRecommendation] = useState(false);
+  const [tempMechanicNotes, setTempMechanicNotes] = useState('');
+  const [tempRecommendation, setTempRecommendation] = useState('');
+
+  const reloadTx = useCallback(async () => {
+    if (!id) return;
+    const fresh = await transactionService.getById(id);
+    setTx(fresh);
+  }, [id]);
 
   useEffect(() => {
-    if (id) {
-      transactionService.getById(id).then(setTx);
-    }
-  }, [id]);
+    reloadTx();
+  }, [reloadTx]);
 
   const markPaid = async () => {
     if (!id) return;
@@ -65,12 +83,98 @@ export default function TransactionDetail() {
     }
   };
 
-  const handleWhatsApp = async () => {
+  const openWaTemplate = () => {
     if (!tx) return;
-    setActionBusy('wa');
-    const r = await receiptService.sendWhatsApp(tx);
-    if (!r.ok) showToast(r.reason ?? 'Gagal kirim WA', 'error');
-    setActionBusy(null);
+    if (!tx.customer_phone) {
+      showToast('Pelanggan belum punya nomor HP', 'error');
+      return;
+    }
+    setWaModalOpen(true);
+  };
+
+  const handleAddService = async (svc: { service_name: string; price: number }) => {
+    if (!tx) return;
+    try {
+      await transactionService.addServiceItem(tx.id, svc.service_name, svc.price);
+      await reloadTx();
+      await reloadList();
+      showToast('Jasa ditambahkan', 'success');
+    } catch (e: any) {
+      showToast('Gagal: ' + (e?.message ?? ''), 'error');
+    }
+  };
+
+  const handleAddSparepart = async (
+    sp: { id: string; name: string; sell_price: number },
+    qty: number
+  ) => {
+    if (!tx) return;
+    try {
+      await transactionService.addSparepartLine(tx.id, {
+        sparepart_id: sp.id,
+        sparepart_name: sp.name,
+        quantity: qty,
+        sell_price: sp.sell_price,
+      });
+      await reloadTx();
+      await reloadList();
+      setAddSparepartOpen(false);
+      showToast('Sparepart ditambahkan', 'success');
+    } catch (e: any) {
+      showToast('Gagal: ' + (e?.message ?? ''), 'error');
+    }
+  };
+
+  const performRemoveItem = async () => {
+    if (!tx || !confirmRemoveItem) return;
+    const target = confirmRemoveItem;
+    setConfirmRemoveItem(null);
+    try {
+      if (target.kind === 'service') {
+        await transactionService.removeServiceItem(target.itemId, tx.id);
+      } else {
+        await transactionService.removeSparepartLine(target.itemId, tx.id);
+      }
+      await reloadTx();
+      await reloadList();
+      showToast('Item dihapus', 'success');
+    } catch (e: any) {
+      showToast('Gagal hapus: ' + (e?.message ?? ''), 'error');
+    }
+  };
+
+  const saveMechanicNotes = async () => {
+    if (!tx) return;
+    try {
+      await transactionService.updateMeta(tx.id, { mechanic_notes: tempMechanicNotes });
+      await reloadTx();
+      setEditMechanicNotes(false);
+      showToast('Catatan disimpan', 'success');
+    } catch (e: any) {
+      showToast('Gagal: ' + (e?.message ?? ''), 'error');
+    }
+  };
+
+  const saveRecommendation = async () => {
+    if (!tx) return;
+    try {
+      await transactionService.updateMeta(tx.id, { recommendation: tempRecommendation });
+      await reloadTx();
+      setEditRecommendation(false);
+      showToast('Rekomendasi disimpan', 'success');
+    } catch (e: any) {
+      showToast('Gagal: ' + (e?.message ?? ''), 'error');
+    }
+  };
+
+  const startEditMechanicNotes = () => {
+    setTempMechanicNotes(tx?.mechanic_notes ?? '');
+    setEditMechanicNotes(true);
+  };
+
+  const startEditRecommendation = () => {
+    setTempRecommendation(tx?.recommendation ?? '');
+    setEditRecommendation(true);
   };
 
   if (!tx) {
@@ -135,105 +239,426 @@ export default function TransactionDetail() {
         ) : null}
 
         {/* Services */}
-        {tx.service_items && tx.service_items.length > 0 && (
+        {(tx.status === 'pending' ||
+          (tx.service_items && tx.service_items.length > 0)) && (
           <Card style={{ marginBottom: 12 }}>
-            <Text style={sectionLabel}>JASA SERVIS</Text>
-            {tx.service_items.map((s) => (
-              <View
-                key={s.id}
-                style={{
-                  flexDirection: 'row',
-                  justifyContent: 'space-between',
-                  paddingVertical: 8,
-                  borderBottomWidth: 1,
-                  borderBottomColor: theme.colors.divider,
-                }}
-              >
-                <Text style={{ color: theme.colors.text, flex: 1 }}>{s.service_name}</Text>
-                <Text style={{ color: theme.colors.accent, fontWeight: '700' }}>
-                  {formatCurrency(s.price)}
-                </Text>
-              </View>
-            ))}
             <View
               style={{
                 flexDirection: 'row',
                 justifyContent: 'space-between',
-                paddingTop: 8,
+                alignItems: 'center',
+                marginBottom: 6,
               }}
             >
-              <Text style={{ color: theme.colors.textSecondary }}>Subtotal</Text>
-              <Text style={{ color: theme.colors.text, fontWeight: '700' }}>
-                {formatCurrency(tx.total_service)}
-              </Text>
+              <Text style={sectionLabel}>JASA SERVIS</Text>
+              {tx.status === 'pending' ? (
+                <Pressable
+                  onPress={() => setAddServiceOpen(true)}
+                  style={({ pressed }) => ({
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 4,
+                    paddingHorizontal: 10,
+                    paddingVertical: 6,
+                    borderRadius: theme.radius.full,
+                    backgroundColor: theme.colors.accent + '20',
+                    opacity: pressed ? 0.7 : 1,
+                  })}
+                  hitSlop={6}
+                >
+                  <Ionicons name="add" size={14} color={theme.colors.accent} />
+                  <Text
+                    style={{
+                      color: theme.colors.accent,
+                      fontSize: 12,
+                      fontWeight: '700',
+                    }}
+                  >
+                    Tambah
+                  </Text>
+                </Pressable>
+              ) : null}
             </View>
+            {tx.service_items && tx.service_items.length > 0 ? (
+              tx.service_items.map((s, i) => (
+                <View
+                  key={s.id}
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    paddingVertical: 12,
+                    paddingBottom: i === tx.service_items!.length - 1 ? 0 : 12,
+                    borderBottomWidth: i === tx.service_items!.length - 1 ? 0 : 1,
+                    borderBottomColor: theme.colors.divider,
+                    gap: 12,
+                  }}
+                >
+                  <View
+                    style={{
+                      width: 36,
+                      height: 36,
+                      borderRadius: 10,
+                      backgroundColor: theme.colors.accent + '15',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    <Ionicons name="build" size={16} color={theme.colors.accent} />
+                  </View>
+                  <Text
+                    style={{ color: theme.colors.text, flex: 1, fontSize: 14, fontWeight: '500' }}
+                    numberOfLines={2}
+                  >
+                    {s.service_name}
+                  </Text>
+                  <Text
+                    style={{ color: theme.colors.accent, fontWeight: '700', fontSize: 15 }}
+                  >
+                    {formatCurrency(s.price)}
+                  </Text>
+                  {tx.status === 'pending' ? (
+                    <Pressable
+                      onPress={() =>
+                        setConfirmRemoveItem({
+                          kind: 'service',
+                          itemId: s.id,
+                          name: s.service_name,
+                        })
+                      }
+                      hitSlop={8}
+                      style={({ pressed }) => ({
+                        width: 36,
+                        height: 36,
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        borderRadius: 10,
+                        backgroundColor: pressed
+                          ? theme.colors.danger + '20'
+                          : 'transparent',
+                      })}
+                    >
+                      <Ionicons
+                        name="trash"
+                        size={16}
+                        color={theme.colors.danger}
+                      />
+                    </Pressable>
+                  ) : null}
+                </View>
+              ))
+            ) : (
+              <Text
+                style={{
+                  color: theme.colors.textMuted,
+                  fontSize: 12,
+                  textAlign: 'center',
+                  paddingVertical: 12,
+                }}
+              >
+                Belum ada jasa
+              </Text>
+            )}
+            {tx.service_items && tx.service_items.length > 0 ? (
+              <View
+                style={{
+                  flexDirection: 'row',
+                  justifyContent: 'space-between',
+                  paddingTop: 8,
+                }}
+              >
+                <Text style={{ color: theme.colors.textSecondary }}>Subtotal</Text>
+                <Text style={{ color: theme.colors.text, fontWeight: '700' }}>
+                  {formatCurrency(tx.total_service)}
+                </Text>
+              </View>
+            ) : null}
           </Card>
         )}
 
         {/* Spareparts */}
-        {tx.spareparts && tx.spareparts.length > 0 && (
+        {(tx.status === 'pending' ||
+          (tx.spareparts && tx.spareparts.length > 0)) && (
           <Card style={{ marginBottom: 12 }}>
-            <Text style={sectionLabel}>SPAREPART</Text>
-            {tx.spareparts.map((p) => (
-              <View
-                key={p.id}
-                style={{
-                  flexDirection: 'row',
-                  justifyContent: 'space-between',
-                  paddingVertical: 8,
-                  borderBottomWidth: 1,
-                  borderBottomColor: theme.colors.divider,
-                }}
-              >
-                <View style={{ flex: 1 }}>
-                  <Text style={{ color: theme.colors.text }}>{p.sparepart_name}</Text>
-                  <Text style={{ color: theme.colors.textMuted, fontSize: 11 }}>
-                    {formatCurrency(p.sell_price)} × {p.quantity}
-                  </Text>
-                </View>
-                <Text style={{ color: theme.colors.accent, fontWeight: '700' }}>
-                  {formatCurrency(p.sell_price * p.quantity)}
-                </Text>
-              </View>
-            ))}
             <View
               style={{
                 flexDirection: 'row',
                 justifyContent: 'space-between',
-                paddingTop: 8,
+                alignItems: 'center',
+                marginBottom: 6,
               }}
             >
-              <Text style={{ color: theme.colors.textSecondary }}>Subtotal</Text>
-              <Text style={{ color: theme.colors.text, fontWeight: '700' }}>
-                {formatCurrency(tx.total_sparepart)}
-              </Text>
+              <Text style={sectionLabel}>SPAREPART</Text>
+              {tx.status === 'pending' ? (
+                <Pressable
+                  onPress={() => setAddSparepartOpen(true)}
+                  style={({ pressed }) => ({
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 4,
+                    paddingHorizontal: 10,
+                    paddingVertical: 6,
+                    borderRadius: theme.radius.full,
+                    backgroundColor: theme.colors.accent + '20',
+                    opacity: pressed ? 0.7 : 1,
+                  })}
+                  hitSlop={6}
+                >
+                  <Ionicons name="add" size={14} color={theme.colors.accent} />
+                  <Text
+                    style={{
+                      color: theme.colors.accent,
+                      fontSize: 12,
+                      fontWeight: '700',
+                    }}
+                  >
+                    Tambah
+                  </Text>
+                </Pressable>
+              ) : null}
             </View>
+            {tx.spareparts && tx.spareparts.length > 0 ? (
+              tx.spareparts.map((p, i) => (
+                <View
+                  key={p.id}
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    paddingVertical: 12,
+                    paddingBottom: i === tx.spareparts!.length - 1 ? 0 : 12,
+                    borderBottomWidth: i === tx.spareparts!.length - 1 ? 0 : 1,
+                    borderBottomColor: theme.colors.divider,
+                    gap: 12,
+                  }}
+                >
+                  <View
+                    style={{
+                      width: 36,
+                      height: 36,
+                      borderRadius: 10,
+                      backgroundColor: theme.colors.warning + '15',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    <Ionicons name="cube" size={16} color={theme.colors.warning} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ color: theme.colors.text, fontSize: 14, fontWeight: '500' }} numberOfLines={2}>
+                      {p.sparepart_name}
+                    </Text>
+                    <Text style={{ color: theme.colors.textMuted, fontSize: 12, marginTop: 2 }}>
+                      {formatCurrency(p.sell_price)} × {p.quantity}
+                    </Text>
+                  </View>
+                  <Text
+                    style={{ color: theme.colors.accent, fontWeight: '700', fontSize: 15 }}
+                  >
+                    {formatCurrency(p.sell_price * p.quantity)}
+                  </Text>
+                  {tx.status === 'pending' ? (
+                    <Pressable
+                      onPress={() =>
+                        setConfirmRemoveItem({
+                          kind: 'sparepart',
+                          itemId: p.id,
+                          name: p.sparepart_name ?? '-',
+                        })
+                      }
+                      hitSlop={8}
+                      style={({ pressed }) => ({
+                        width: 36,
+                        height: 36,
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        borderRadius: 10,
+                        backgroundColor: pressed
+                          ? theme.colors.danger + '20'
+                          : 'transparent',
+                      })}
+                    >
+                      <Ionicons
+                        name="trash"
+                        size={16}
+                        color={theme.colors.danger}
+                      />
+                    </Pressable>
+                  ) : null}
+                </View>
+              ))
+            ) : (
+              <Text
+                style={{
+                  color: theme.colors.textMuted,
+                  fontSize: 12,
+                  textAlign: 'center',
+                  paddingVertical: 12,
+                }}
+              >
+                Belum ada sparepart
+              </Text>
+            )}
+            {tx.spareparts && tx.spareparts.length > 0 ? (
+              <View
+                style={{
+                  flexDirection: 'row',
+                  justifyContent: 'space-between',
+                  paddingTop: 8,
+                }}
+              >
+                <Text style={{ color: theme.colors.textSecondary }}>Subtotal</Text>
+                <Text style={{ color: theme.colors.text, fontWeight: '700' }}>
+                  {formatCurrency(tx.total_sparepart)}
+                </Text>
+              </View>
+            ) : null}
           </Card>
         )}
 
         {tx.recommendation ? (
-          <Card style={{ marginBottom: 12 }} accent>
-            <Text style={sectionLabel}>REKOMENDASI SERVIS BERIKUTNYA</Text>
-            <Text style={{ color: theme.colors.text, marginTop: 4, lineHeight: 20 }}>
-              {tx.recommendation}
-            </Text>
-          </Card>
-        ) : null}
+          editRecommendation ? (
+            <Card style={{ marginBottom: 12 }} accent>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                <Text style={sectionLabel}>REKOMENDASI SERVIS BERIKUTNYA</Text>
+                <Pressable onPress={() => setEditRecommendation(false)} hitSlop={8}>
+                  <Ionicons name="close" size={20} color={theme.colors.textSecondary} />
+                </Pressable>
+              </View>
+              <Input
+                value={tempRecommendation}
+                onChangeText={setTempRecommendation}
+                placeholder="Rekomendasi servis berikutnya..."
+                multiline
+                numberOfLines={3}
+                style={{ minHeight: 80 }}
+              />
+              <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
+                <Button
+                  title="Simpan"
+                  size="sm"
+                  onPress={saveRecommendation}
+                  style={{ flex: 1 }}
+                />
+                <Button
+                  title="Batal"
+                  variant="ghost"
+                  size="sm"
+                  onPress={() => setEditRecommendation(false)}
+                  style={{ flex: 1 }}
+                />
+              </View>
+            </Card>
+          ) : (
+            <Card style={{ marginBottom: 12 }} accent>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                <Text style={sectionLabel}>REKOMENDASI SERVIS BERIKUTNYA</Text>
+                <Pressable onPress={startEditRecommendation} hitSlop={8}>
+                  <Ionicons name="create" size={16} color={theme.colors.accent} />
+                </Pressable>
+              </View>
+              <Text style={{ color: theme.colors.text, marginTop: 4, lineHeight: 20 }}>
+                {tx.recommendation}
+              </Text>
+            </Card>
+          )
+        ) : (
+          tx.status === 'pending' && (
+            <Card style={{ marginBottom: 12 }} accent>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                <Text style={sectionLabel}>REKOMENDASI SERVIS BERIKUTNYA</Text>
+              </View>
+              <Input
+                value={tempRecommendation}
+                onChangeText={setTempRecommendation}
+                placeholder="Tambahkan rekomendasi..."
+                multiline
+                numberOfLines={3}
+                style={{ minHeight: 80 }}
+              />
+              <Button
+                title="Simpan Rekomendasi"
+                size="sm"
+                onPress={saveRecommendation}
+                style={{ marginTop: 8 }}
+              />
+            </Card>
+          )
+        )}
 
         {tx.mechanic_notes ? (
-          <Card style={{ marginBottom: 12 }}>
-            <Text style={sectionLabel}>CATATAN INTERNAL MEKANIK</Text>
-            <Text style={{ color: theme.colors.text, marginTop: 4 }}>{tx.mechanic_notes}</Text>
-          </Card>
-        ) : null}
+          editMechanicNotes ? (
+            <Card style={{ marginBottom: 12 }}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                <Text style={sectionLabel}>CATATAN INTERNAL MEKANIK</Text>
+                <Pressable onPress={() => setEditMechanicNotes(false)} hitSlop={8}>
+                  <Ionicons name="close" size={20} color={theme.colors.textSecondary} />
+                </Pressable>
+              </View>
+              <Input
+                value={tempMechanicNotes}
+                onChangeText={setTempMechanicNotes}
+                placeholder="Catatan internal mekanik..."
+                multiline
+                numberOfLines={3}
+                style={{ minHeight: 80 }}
+              />
+              <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
+                <Button
+                  title="Simpan"
+                  size="sm"
+                  onPress={saveMechanicNotes}
+                  style={{ flex: 1 }}
+                />
+                <Button
+                  title="Batal"
+                  variant="ghost"
+                  size="sm"
+                  onPress={() => setEditMechanicNotes(false)}
+                  style={{ flex: 1 }}
+                />
+              </View>
+            </Card>
+          ) : (
+            <Card style={{ marginBottom: 12 }}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                <Text style={sectionLabel}>CATATAN INTERNAL MEKANIK</Text>
+                <Pressable onPress={startEditMechanicNotes} hitSlop={8}>
+                  <Ionicons name="create" size={16} color={theme.colors.accent} />
+                </Pressable>
+              </View>
+              <Text style={{ color: theme.colors.text, marginTop: 4 }}>{tx.mechanic_notes}</Text>
+            </Card>
+          )
+        ) : (
+          tx.status === 'pending' && (
+            <Card style={{ marginBottom: 12 }}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                <Text style={sectionLabel}>CATATAN INTERNAL MEKANIK</Text>
+              </View>
+              <Input
+                value={tempMechanicNotes}
+                onChangeText={setTempMechanicNotes}
+                placeholder="Tambahkan catatan..."
+                multiline
+                numberOfLines={3}
+                style={{ minHeight: 80 }}
+              />
+              <Button
+                title="Simpan Catatan"
+                size="sm"
+                onPress={saveMechanicNotes}
+                style={{ marginTop: 8 }}
+              />
+            </Card>
+          )
+        )}
 
         {/* Receipt actions */}
         <View style={{ flexDirection: 'row', gap: 10, marginTop: 8, marginBottom: 8 }}>
           <Button
             title="Kirim WA"
             variant="success"
-            onPress={handleWhatsApp}
-            loading={actionBusy === 'wa'}
+            size="lg"
+            onPress={openWaTemplate}
             disabled={!tx.customer_phone}
             icon={<Ionicons name="logo-whatsapp" size={18} color="#fff" />}
             style={{ flex: 1 }}
@@ -241,6 +666,7 @@ export default function TransactionDetail() {
           <Button
             title="Cetak PDF"
             variant="secondary"
+            size="lg"
             onPress={handlePrint}
             loading={actionBusy === 'print'}
             icon={<Ionicons name="print" size={18} color="#fff" />}
@@ -279,6 +705,38 @@ export default function TransactionDetail() {
         destructive
         onConfirm={handleDelete}
         onCancel={() => setConfirmDelete(false)}
+      />
+
+      <ConfirmDialog
+        visible={!!confirmRemoveItem}
+        title="Hapus Item?"
+        message={`Hapus \"${confirmRemoveItem?.name}\" dari transaksi ini?${confirmRemoveItem?.kind === 'sparepart' ? ' Stok akan dikembalikan.' : ''}`}
+        confirmText="Hapus"
+        destructive
+        onConfirm={performRemoveItem}
+        onCancel={() => setConfirmRemoveItem(null)}
+      />
+
+      <AddServiceSheet
+        visible={addServiceOpen}
+        onClose={() => setAddServiceOpen(false)}
+        onAdd={(svc) => {
+          handleAddService(svc);
+          setAddServiceOpen(false);
+        }}
+      />
+
+      <AddSparepartSheet
+        visible={addSparepartOpen}
+        onClose={() => setAddSparepartOpen(false)}
+        onPick={(sp, qty) => handleAddSparepart(sp, qty)}
+      />
+
+      <WhatsAppTemplateModal
+        visible={waModalOpen}
+        tx={tx}
+        onClose={() => setWaModalOpen(false)}
+        onError={(msg) => showToast(msg, 'error')}
       />
     </View>
   );

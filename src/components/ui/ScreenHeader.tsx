@@ -31,10 +31,11 @@ export function ScreenHeader({ title, subtitle, showBack, rightElement }: Props)
       {showBack && (
         <Pressable
           onPress={() => router.back()}
+          hitSlop={8}
           style={({ pressed }) => ({
-            width: 40,
-            height: 40,
-            borderRadius: 20,
+            width: 44,
+            height: 44,
+            borderRadius: 22,
             backgroundColor: theme.colors.card,
             alignItems: 'center',
             justifyContent: 'center',

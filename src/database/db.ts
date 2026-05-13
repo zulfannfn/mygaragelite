@@ -33,3 +33,17 @@ export async function resetDatabase(): Promise<void> {
   await runMigrations(db);
   await seedDatabaseIfEmpty(db, true);
 }
+
+export async function clearDatabase(): Promise<void> {
+  const db = await getDatabase();
+  await db.execAsync(`
+    DROP TABLE IF EXISTS transaction_spareparts;
+    DROP TABLE IF EXISTS service_items;
+    DROP TABLE IF EXISTS reminders;
+    DROP TABLE IF EXISTS transactions;
+    DROP TABLE IF EXISTS spareparts;
+    DROP TABLE IF EXISTS customers;
+    DROP TABLE IF EXISTS settings;
+  `);
+  await runMigrations(db);
+}

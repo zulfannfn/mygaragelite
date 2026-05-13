@@ -42,7 +42,23 @@ export const reportService = {
     );
 
     const lowStock = await db.getFirstAsync<{ count: number }>(
-      `SELECT COUNT(*) as count FROM spareparts WHERE stock <= min_stock`
+      `SELECT COUNT(*) as count FROM spareparts WHERE stock > 0 AND stock <= min_stock`
+    );
+
+    const outOfStock = await db.getFirstAsync<{ count: number }>(
+      `SELECT COUNT(*) as count FROM spareparts WHERE stock <= 0`
+    );
+
+    const totalTx = await db.getFirstAsync<{ count: number }>(
+      `SELECT COUNT(*) as count FROM transactions`
+    );
+
+    const totalSp = await db.getFirstAsync<{ count: number }>(
+      `SELECT COUNT(*) as count FROM spareparts`
+    );
+
+    const totalSvc = await db.getFirstAsync<{ count: number }>(
+      `SELECT COUNT(*) as count FROM service_items`
     );
 
     return {
@@ -53,6 +69,10 @@ export const reportService = {
       monthRevenue: monthRev?.total ?? 0,
       pendingTransactions: pending?.count ?? 0,
       lowStockCount: lowStock?.count ?? 0,
+      outOfStockCount: outOfStock?.count ?? 0,
+      totalTransactions: totalTx?.count ?? 0,
+      totalSpareparts: totalSp?.count ?? 0,
+      totalServices: totalSvc?.count ?? 0,
     };
   },
 

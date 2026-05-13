@@ -59,9 +59,9 @@ export default function CustomerDetail() {
           <Pressable
             onPress={() => router.push({ pathname: '/customer-form', params: { id: customer.id } })}
             style={({ pressed }) => ({
-              width: 40,
-              height: 40,
-              borderRadius: 20,
+              width: 44,
+              height: 44,
+              borderRadius: 22,
               backgroundColor: theme.colors.card,
               alignItems: 'center',
               justifyContent: 'center',

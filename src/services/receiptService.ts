@@ -217,18 +217,100 @@ export const receiptService = {
   },
 
   /**
-   * Open WhatsApp chat with prefilled receipt text.
-   * Returns false if no phone is set / WA not openable.
+   * Template: pemberitahuan service sudah dibuat (saat tx dibuat / pending).
+   */
+  async buildWaCreated(tx: Transaction, shopOverride?: Partial<ShopInfo>): Promise<string> {
+    const shop = await getShopInfo(shopOverride);
+    const lines: string[] = [];
+    lines.push(`Halo *${tx.customer_name ?? 'Pelanggan'}* 👋`);
+    lines.push('');
+    lines.push(`Kendaraan Anda${tx.customer_plate ? ` (${tx.customer_plate})` : ''} telah kami terima dan sedang dalam proses servis di *${shop.name}*.`);
+    if (tx.complaint && tx.complaint.trim()) {
+      lines.push('');
+      lines.push(`Keluhan tercatat: _${tx.complaint.trim()}_`);
+    }
+    if (tx.mechanic_name) {
+      lines.push('');
+      lines.push(`Mekanik: *${tx.mechanic_name}*`);
+    }
+    lines.push('');
+    lines.push(`No. Servis: *${shortId(tx.id)}*`);
+    lines.push('');
+    lines.push('Kami akan menghubungi Anda lagi setelah servis selesai. Terima kasih 🙏');
+    if (shop.phone) {
+      lines.push('');
+      lines.push(`Bengkel: ${shop.phone}`);
+    }
+    return lines.join('\n');
+  },
+
+  /**
+   * Template: service selesai + tagihan (untuk status pending dengan total).
+   */
+  async buildWaReady(tx: Transaction, shopOverride?: Partial<ShopInfo>): Promise<string> {
+    const shop = await getShopInfo(shopOverride);
+    const lines: string[] = [];
+    lines.push(`Halo *${tx.customer_name ?? 'Pelanggan'}* 👋`);
+    lines.push('');
+    lines.push(`Servis kendaraan Anda${tx.customer_plate ? ` (${tx.customer_plate})` : ''} di *${shop.name}* sudah *SELESAI* ✅`);
+    lines.push('Kendaraan siap diambil.');
+    lines.push('');
+    if (tx.service_items && tx.service_items.length > 0) {
+      lines.push('*Jasa:*');
+      for (const s of tx.service_items) {
+        lines.push(`• ${s.service_name} — ${formatCurrency(s.price)}`);
+      }
+    }
+    if (tx.spareparts && tx.spareparts.length > 0) {
+      lines.push('*Sparepart:*');
+      for (const p of tx.spareparts) {
+        lines.push(`• ${p.sparepart_name} ×${p.quantity} — ${formatCurrency(p.sell_price * p.quantity)}`);
+      }
+    }
+    lines.push('');
+    lines.push(`*TOTAL TAGIHAN: ${formatCurrency(tx.total_amount)}*`);
+    lines.push('Mohon untuk segera melakukan pembayaran saat pengambilan. 🙏');
+    if (tx.recommendation && tx.recommendation.trim()) {
+      lines.push('');
+      lines.push(`💡 Rekomendasi: _${tx.recommendation.trim()}_`);
+    }
+    if (shop.phone) {
+      lines.push('');
+      lines.push(`Bengkel: ${shop.phone}`);
+    }
+    return lines.join('\n');
+  },
+
+  /**
+   * Template: service selesai + sudah lunas (struk lengkap).
+   */
+  async buildWaPaid(tx: Transaction, shopOverride?: Partial<ShopInfo>): Promise<string> {
+    const text = await this.buildText(tx, shopOverride);
+    return `Halo *${tx.customer_name ?? 'Pelanggan'}* 👋\nServis sudah selesai dan *LUNAS* ✅\nBerikut struk Anda:\n\n${text}`;
+  },
+
+  /**
+   * Open WhatsApp chat with prefilled receipt text (default = receipt).
    */
   async sendWhatsApp(
     tx: Transaction,
     shopOverride?: Partial<ShopInfo>
   ): Promise<{ ok: boolean; reason?: string }> {
-    const phone = normalizePhoneId(tx.customer_phone ?? '');
+    const text = await this.buildText(tx, shopOverride);
+    return this.sendWhatsAppText(tx.customer_phone ?? '', text);
+  },
+
+  /**
+   * Generic helper: kirim text apa pun ke nomor pelanggan.
+   */
+  async sendWhatsAppText(
+    phoneRaw: string,
+    text: string
+  ): Promise<{ ok: boolean; reason?: string }> {
+    const phone = normalizePhoneId(phoneRaw);
     if (!phone) {
       return { ok: false, reason: 'Pelanggan belum punya nomor HP' };
     }
-    const text = await this.buildText(tx, shopOverride);
     const url = `https://wa.me/${phone}?text=${encodeURIComponent(text)}`;
     try {
       const can = await Linking.canOpenURL(url);

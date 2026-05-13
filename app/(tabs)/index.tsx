@@ -124,30 +124,44 @@ export default function Dashboard() {
       <View style={{ paddingHorizontal: 16 }}>
         <View style={{ flexDirection: 'row', gap: 10, marginBottom: 10 }}>
           <StatCard
-            title="Servis"
-            value={loading ? '-' : String(stats?.todayServiceCount ?? 0)}
+            title="Total Transaksi"
+            value={loading ? '-' : String(stats?.totalTransactions ?? 0)}
+            icon="receipt"
+            color={theme.colors.blue}
+          />
+          <StatCard
+            title="Total Sparepart"
+            value={loading ? '-' : String(stats?.totalSpareparts ?? 0)}
+            icon="cube"
+            color={theme.colors.success}
+          />
+        </View>
+        <View style={{ flexDirection: 'row', gap: 10, marginBottom: 10 }}>
+          <StatCard
+            title="Total Jasa"
+            value={loading ? '-' : String(stats?.totalServices ?? 0)}
             icon="construct"
             color={theme.colors.accent}
           />
           <StatCard
-            title="Transaksi"
-            value={loading ? '-' : String(stats?.todayTransactionCount ?? 0)}
-            icon="receipt"
-            color={theme.colors.blue}
+            title="Pending"
+            value={loading ? '-' : String(stats?.pendingTransactions ?? 0)}
+            icon="time"
+            color={theme.colors.warning}
           />
         </View>
         <View style={{ flexDirection: 'row', gap: 10 }}>
-          <StatCard
-            title="Sparepart"
-            value={loading ? '-' : String(stats?.todaySparepartSold ?? 0)}
-            icon="cube"
-            color={theme.colors.success}
-          />
           <StatCard
             title="Stok Menipis"
             value={loading ? '-' : String(stats?.lowStockCount ?? 0)}
             icon="warning"
             color={theme.colors.warning}
+          />
+          <StatCard
+            title="Stok Habis"
+            value={loading ? '-' : String(stats?.outOfStockCount ?? 0)}
+            icon="alert-circle"
+            color={theme.colors.danger}
           />
         </View>
       </View>

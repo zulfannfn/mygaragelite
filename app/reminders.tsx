@@ -93,9 +93,9 @@ export default function RemindersScreen() {
           <Pressable
             onPress={() => setAddOpen(true)}
             style={({ pressed }) => ({
-              width: 40,
-              height: 40,
-              borderRadius: 20,
+              width: 44,
+              height: 44,
+              borderRadius: 22,
               backgroundColor: theme.colors.accent,
               alignItems: 'center',
               justifyContent: 'center',

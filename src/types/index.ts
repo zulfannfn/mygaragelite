@@ -96,6 +96,10 @@ export interface DashboardStats {
   monthRevenue: number;
   pendingTransactions: number;
   lowStockCount: number;
+  outOfStockCount: number;
+  totalTransactions: number;
+  totalSpareparts: number;
+  totalServices: number;
 }
 
 export interface ReportData {

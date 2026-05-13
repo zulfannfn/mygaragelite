@@ -205,6 +205,108 @@ export const transactionService = {
     );
   },
 
+  /**
+   * Recalculate and persist totals (service, sparepart, grand) from current line items.
+   */
+  async recalcTotals(id: string): Promise<void> {
+    const db = await getDatabase();
+    const svcRow = await db.getFirstAsync<{ total: number }>(
+      'SELECT COALESCE(SUM(price), 0) as total FROM service_items WHERE transaction_id = ?',
+      id
+    );
+    const spRow = await db.getFirstAsync<{ total: number }>(
+      'SELECT COALESCE(SUM(sell_price * quantity), 0) as total FROM transaction_spareparts WHERE transaction_id = ?',
+      id
+    );
+    const totalService = svcRow?.total ?? 0;
+    const totalSparepart = spRow?.total ?? 0;
+    await db.runAsync(
+      'UPDATE transactions SET total_service = ?, total_sparepart = ?, total_amount = ?, updated_at = ? WHERE id = ?',
+      totalService,
+      totalSparepart,
+      totalService + totalSparepart,
+      Date.now(),
+      id
+    );
+  },
+
+  async addServiceItem(
+    transactionId: string,
+    serviceName: string,
+    price: number
+  ): Promise<void> {
+    const db = await getDatabase();
+    await db.runAsync(
+      'INSERT INTO service_items (id, transaction_id, service_name, price) VALUES (?, ?, ?, ?)',
+      generateId(),
+      transactionId,
+      serviceName,
+      price
+    );
+    await this.recalcTotals(transactionId);
+  },
+
+  async removeServiceItem(serviceItemId: string, transactionId: string): Promise<void> {
+    const db = await getDatabase();
+    await db.runAsync('DELETE FROM service_items WHERE id = ?', serviceItemId);
+    await this.recalcTotals(transactionId);
+  },
+
+  async addSparepartLine(
+    transactionId: string,
+    line: {
+      sparepart_id: string | null;
+      sparepart_name: string;
+      quantity: number;
+      sell_price: number;
+    }
+  ): Promise<void> {
+    const db = await getDatabase();
+    await db.withTransactionAsync(async () => {
+      await db.runAsync(
+        `INSERT INTO transaction_spareparts (id, transaction_id, sparepart_id, sparepart_name, quantity, sell_price)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        generateId(),
+        transactionId,
+        line.sparepart_id,
+        line.sparepart_name,
+        line.quantity,
+        line.sell_price
+      );
+      if (line.sparepart_id) {
+        await db.runAsync(
+          'UPDATE spareparts SET stock = MAX(0, stock - ?), updated_at = ? WHERE id = ?',
+          line.quantity,
+          Date.now(),
+          line.sparepart_id
+        );
+      }
+    });
+    await this.recalcTotals(transactionId);
+  },
+
+  async removeSparepartLine(
+    transactionSparepartId: string,
+    transactionId: string
+  ): Promise<void> {
+    const db = await getDatabase();
+    const row = await db.getFirstAsync<TransactionSparepart>(
+      'SELECT * FROM transaction_spareparts WHERE id = ?',
+      transactionSparepartId
+    );
+    await db.withTransactionAsync(async () => {
+      await db.runAsync(
+        'DELETE FROM transaction_spareparts WHERE id = ?',
+        transactionSparepartId
+      );
+      if (row?.sparepart_id) {
+        // Restore stock
+        await sparepartService.adjustStock(row.sparepart_id, row.quantity);
+      }
+    });
+    await this.recalcTotals(transactionId);
+  },
+
   async delete(id: string): Promise<void> {
     const db = await getDatabase();
     // Restore stock

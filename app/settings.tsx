@@ -8,7 +8,7 @@ import { ConfirmDialog } from '../src/components/ui/ConfirmDialog';
 import { Input } from '../src/components/ui/Input';
 import { ScreenHeader } from '../src/components/ui/ScreenHeader';
 import { theme } from '../src/constants/theme';
-import { resetDatabase } from '../src/database/db';
+import { clearDatabase, resetDatabase } from '../src/database/db';
 import { backupService } from '../src/services/backupService';
 import { useAppStore } from '../src/store/useAppStore';
 
@@ -26,6 +26,7 @@ export default function SettingsScreen() {
   const [address, setAddress] = useState(workshopAddress);
   const [phone, setPhone] = useState(workshopPhone);
   const [confirmReset, setConfirmReset] = useState(false);
+  const [confirmClear, setConfirmClear] = useState(false);
   const [busy, setBusy] = useState(false);
 
   const saveInfo = async () => {
@@ -64,6 +65,15 @@ export default function SettingsScreen() {
     await resetDatabase();
     await loadSettings();
     showToast('Database direset & data dummy dimuat', 'success');
+    setBusy(false);
+  };
+
+  const doClear = async () => {
+    setConfirmClear(false);
+    setBusy(true);
+    await clearDatabase();
+    await loadSettings();
+    showToast('Semua data berhasil dihapus', 'success');
     setBusy(false);
   };
 
@@ -169,11 +179,20 @@ export default function SettingsScreen() {
 
         <Card style={{ marginBottom: 16 }}>
           <Button
-            title="Reset & Muat Data Dummy"
+            title="Hapus Semua Data"
             variant="danger"
+            onPress={() => setConfirmClear(true)}
+            loading={busy}
+            icon={<Ionicons name="trash" size={18} color="#fff" />}
+            fullWidth
+          />
+          <View style={{ height: 8 }} />
+          <Button
+            title="Reset & Muat Data Dummy"
+            variant="outline"
             onPress={() => setConfirmReset(true)}
             loading={busy}
-            icon={<Ionicons name="refresh" size={18} color="#fff" />}
+            icon={<Ionicons name="refresh" size={18} color={theme.colors.text} />}
             fullWidth
           />
         </Card>
@@ -201,6 +220,15 @@ export default function SettingsScreen() {
         destructive
         onConfirm={doReset}
         onCancel={() => setConfirmReset(false)}
+      />
+      <ConfirmDialog
+        visible={confirmClear}
+        title="Hapus Semua Data?"
+        message="Semua data akan dihapus permanen tanpa data dummy. Tindakan ini tidak dapat dibatalkan."
+        confirmText="Hapus"
+        destructive
+        onConfirm={doClear}
+        onCancel={() => setConfirmClear(false)}
       />
     </View>
   );
