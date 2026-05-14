@@ -5,18 +5,22 @@ import {
     Transaction,
     TransactionSparepart,
     TransactionStatus,
+    TransactionType,
 } from '../types';
 import { generateId } from '../utils/id';
 import { sparepartService } from './sparepartService';
 
 export interface TransactionInput {
-  customer_id: string;
+  customer_id: string | null;
   mechanic_id?: string | null;
   mechanic_notes?: string;
   complaint?: string;
   recommendation?: string;
+  type?: TransactionType;
   status?: TransactionStatus;
   payment_method?: PaymentMethod | null;
+  paid_amount?: number;
+  change_amount?: number;
   service_items: { service_name: string; price: number }[];
   spareparts: {
     sparepart_id: string | null;
@@ -30,6 +34,7 @@ export const transactionService = {
   async getAll(filters?: {
     search?: string;
     status?: TransactionStatus;
+    type?: TransactionType;
     startDate?: number;
     endDate?: number;
   }): Promise<Transaction[]> {
@@ -52,6 +57,10 @@ export const transactionService = {
     if (filters?.status) {
       sql += ' AND t.status = ?';
       params.push(filters.status);
+    }
+    if (filters?.type) {
+      sql += ' AND t.type = ?';
+      params.push(filters.type);
     }
     if (filters?.startDate) {
       sql += ' AND t.created_at >= ?';
@@ -117,16 +126,19 @@ export const transactionService = {
 
     await db.withTransactionAsync(async () => {
       await db.runAsync(
-        `INSERT INTO transactions (id, customer_id, mechanic_id, mechanic_notes, complaint, recommendation, status, payment_method, total_service, total_sparepart, total_amount, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO transactions (id, customer_id, mechanic_id, mechanic_notes, complaint, recommendation, type, status, payment_method, paid_amount, change_amount, total_service, total_sparepart, total_amount, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         id,
         input.customer_id,
         input.mechanic_id ?? null,
         input.mechanic_notes ?? '',
         input.complaint ?? '',
         input.recommendation ?? '',
+        input.type ?? 'service',
         input.status ?? 'pending',
         input.payment_method ?? null,
+        input.paid_amount ?? 0,
+        input.change_amount ?? 0,
         totalService,
         totalSparepart,
         total,

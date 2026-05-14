@@ -76,3 +76,17 @@ export function addDays(timestamp: number, days: number): number {
 export function daysBetween(a: number, b: number): number {
   return Math.floor((b - a) / 86400000);
 }
+
+export function startOfYear(timestamp: number = Date.now()): number {
+  const d = new Date(timestamp);
+  d.setMonth(0, 1);
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
+}
+
+export function endOfYear(timestamp: number = Date.now()): number {
+  const d = new Date(timestamp);
+  d.setMonth(11, 31);
+  d.setHours(23, 59, 59, 999);
+  return d.getTime();
+}

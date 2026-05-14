@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import React, { useState } from 'react';
 import { FlatList, Modal, Pressable, Text, View } from 'react-native';
 import { theme } from '../../constants/theme';
+import { Card } from './Card';
 
 interface Props<T extends string> {
   label?: string;
@@ -34,13 +35,13 @@ export function Picker<T extends string>({
   const valueColor = optionColors?.[value];
 
   return (
-    <View style={{ marginBottom: 14 }}>
+    <View>
       {label ? (
         <Text
           style={{
             color: theme.colors.textSecondary,
             fontSize: 13,
-            marginBottom: 6,
+            marginBottom: 2,
             fontWeight: '600',
           }}
         >
@@ -50,47 +51,51 @@ export function Picker<T extends string>({
       <Pressable
         onPress={() => setOpen(true)}
         style={({ pressed }) => ({
-          flexDirection: 'row',
-          alignItems: 'center',
-          gap: 12,
           backgroundColor: theme.colors.cardLight,
           borderRadius: theme.radius.lg,
           borderWidth: 1,
           borderColor: theme.colors.border,
-          paddingHorizontal: 14,
-          minHeight: 54,
+          paddingHorizontal: 12,
+          minHeight: 48,
+          width: '100%',
           opacity: pressed ? 0.85 : 1,
         })}
       >
-        {valueIcon ? (
-          <View
-            style={{
-              width: 32,
-              height: 32,
-              borderRadius: 8,
-              backgroundColor: (valueColor ?? theme.colors.accent) + '25',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            <Ionicons
-              name={valueIcon}
-              size={18}
-              color={valueColor ?? theme.colors.accent}
-            />
+        <View style={{ flexDirection: 'row', alignItems: 'center', height: '100%' }}>
+          <View style={{ width: 36, alignItems: 'center', justifyContent: 'center', marginRight: 8 }}>
+            {valueIcon ? (
+              <View
+                style={{
+                  width: 32,
+                  height: 32,
+                  borderRadius: 8,
+                  backgroundColor: (valueColor ?? theme.colors.accent) + '18',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <Ionicons
+                  name={valueIcon}
+                  size={16}
+                  color={valueColor ?? theme.colors.accent}
+                />
+              </View>
+            ) : null}
           </View>
-        ) : null}
-        <Text
-          style={{
-            color: value ? theme.colors.text : theme.colors.textMuted,
-            fontSize: 15,
-            fontWeight: value ? '600' : '400',
-            flex: 1,
-          }}
-        >
-          {value ? displayLabel(value) : placeholder}
-        </Text>
-        <Ionicons name="chevron-down" size={20} color={theme.colors.textSecondary} />
+          <Text
+            style={{
+              color: value ? theme.colors.text : theme.colors.textMuted,
+              fontSize: 15,
+              fontWeight: value ? '600' : '400',
+              flex: 1,
+              marginRight: 8,
+            }}
+            numberOfLines={1}
+          >
+            {value ? displayLabel(value) : placeholder}
+          </Text>
+          <Ionicons name="chevron-down" size={18} color={theme.colors.textSecondary} />
+        </View>
       </Pressable>
 
       <Modal
@@ -145,73 +150,60 @@ export function Picker<T extends string>({
             <FlatList
               data={options as T[]}
               keyExtractor={(item) => item}
-              contentContainerStyle={{ paddingHorizontal: 12, paddingBottom: 4 }}
+              contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 4, gap: 8 }}
               renderItem={({ item }) => {
                 const active = item === value;
                 const icon = optionIcons?.[item];
                 const color = optionColors?.[item] ?? theme.colors.accent;
                 return (
-                  <Pressable
+                  <Card
                     onPress={() => {
                       onChange(item);
                       setOpen(false);
                     }}
-                    style={({ pressed }) => ({
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      gap: 14,
-                      paddingHorizontal: 14,
-                      minHeight: 60,
-                      borderRadius: theme.radius.lg,
-                      marginVertical: 3,
-                      backgroundColor: active
-                        ? color + '15'
-                        : pressed
-                          ? theme.colors.cardLight
-                          : 'transparent',
+                    style={{
+                      borderColor: active ? color + '40' : theme.colors.border,
                       borderWidth: active ? 1.5 : 1,
-                      borderColor: active ? color : 'transparent',
-                    })}
+                    }}
+                    padding="sm"
                   >
-                    {icon ? (
-                      <View
+                    <View style={{ flexDirection: 'row', alignItems: 'center', width: '100%' }}>
+                      {icon ? (
+                        <View
+                          style={{
+                            width: 40,
+                            height: 40,
+                            borderRadius: 10,
+                            backgroundColor: color + '18',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            marginRight: 12,
+                          }}
+                        >
+                          <Ionicons name={icon} size={18} color={color} />
+                        </View>
+                      ) : (
+                        <View style={{ width: 40, marginRight: 12 }} />
+                      )}
+                      <Text
                         style={{
-                          width: 36,
-                          height: 36,
-                          borderRadius: 10,
-                          backgroundColor: color + '20',
-                          alignItems: 'center',
-                          justifyContent: 'center',
+                          color: theme.colors.text,
+                          fontSize: 15,
+                          fontWeight: active ? '700' : '500',
+                          flex: 1,
+                          marginRight: 12,
                         }}
+                        numberOfLines={1}
                       >
-                        <Ionicons name={icon} size={18} color={color} />
-                      </View>
-                    ) : null}
-                    <Text
-                      style={{
-                        color: theme.colors.text,
-                        fontSize: 15,
-                        fontWeight: active ? '700' : '500',
-                        flex: 1,
-                      }}
-                    >
-                      {displayLabel(item)}
-                    </Text>
-                    {active ? (
-                      <View
-                        style={{
-                          width: 24,
-                          height: 24,
-                          borderRadius: 12,
-                          backgroundColor: color,
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                        }}
-                      >
-                        <Ionicons name="checkmark" size={16} color="#fff" />
-                      </View>
-                    ) : null}
-                  </Pressable>
+                        {displayLabel(item)}
+                      </Text>
+                      {active ? (
+                        <Ionicons name="checkmark-circle" size={22} color={color} />
+                      ) : (
+                        <View style={{ width: 22 }} />
+                      )}
+                    </View>
+                  </Card>
                 );
               }}
             />

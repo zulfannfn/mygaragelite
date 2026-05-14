@@ -3,11 +3,12 @@ import {
     TransactionInput,
     transactionService,
 } from '../services/transactionService';
-import { PaymentMethod, Transaction, TransactionStatus } from '../types';
+import { PaymentMethod, Transaction, TransactionStatus, TransactionType } from '../types';
 
 interface TransactionFilters {
   search: string;
   status?: TransactionStatus;
+  type?: TransactionType;
   startDate?: number;
   endDate?: number;
 }

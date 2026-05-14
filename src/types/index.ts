@@ -1,5 +1,6 @@
 export type VehicleType = 'Motor' | 'Mobil';
 export type TransactionStatus = 'pending' | 'paid' | 'cancelled';
+export type TransactionType = 'service' | 'retail';
 export type PaymentMethod = 'Tunai' | 'Transfer' | 'QRIS' | 'Debit';
 export type ReminderType = 'oil_change' | 'periodic_service' | 'tune_up';
 
@@ -23,6 +24,14 @@ export interface Sparepart {
   min_stock: number;
   buy_price: number;
   sell_price: number;
+  created_at: number;
+  updated_at: number;
+}
+
+export interface Service {
+  id: string;
+  name: string;
+  price: number;
   created_at: number;
   updated_at: number;
 }
@@ -54,8 +63,11 @@ export interface Transaction {
   complaint: string;
   recommendation: string;
   mechanic_notes: string;
+  type: TransactionType;
   status: TransactionStatus;
   payment_method: PaymentMethod | null;
+  paid_amount: number;
+  change_amount: number;
   total_service: number;
   total_sparepart: number;
   total_amount: number;
@@ -94,6 +106,7 @@ export interface DashboardStats {
   todaySparepartSold: number;
   todayTransactionCount: number;
   monthRevenue: number;
+  yearRevenue: number;
   pendingTransactions: number;
   lowStockCount: number;
   outOfStockCount: number;
@@ -106,6 +119,10 @@ export interface ReportData {
   date: string;
   revenue: number;
   transactionCount: number;
+  serviceRevenue: number;
+  retailRevenue: number;
+  serviceCount: number;
+  retailCount: number;
 }
 
 export interface TopSparepart {
@@ -113,4 +130,23 @@ export interface TopSparepart {
   name: string;
   totalSold: number;
   revenue: number;
+}
+
+export interface TopService {
+  name: string;
+  totalSold: number;
+  revenue: number;
+}
+
+export interface TopMechanic {
+  id: string;
+  name: string;
+  transactionCount: number;
+  revenue: number;
+}
+
+export interface PaymentMethodTotal {
+  method: string;
+  total: number;
+  count: number;
 }

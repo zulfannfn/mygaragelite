@@ -122,6 +122,14 @@ export async function seedDatabaseIfEmpty(
     );
   }
 
+  // Services
+  for (const s of SERVICE_PRESETS) {
+    await db.runAsync(
+      `INSERT INTO services (id, name, price, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`,
+      generateId(), s[0], s[1], now, now
+    );
+  }
+
   // Spareparts
   const sparepartMap: Record<string, { id: string; name: string; price: number }> = {};
   for (const s of DUMMY_SPAREPARTS) {

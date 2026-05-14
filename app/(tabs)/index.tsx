@@ -10,7 +10,6 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AdBanner } from '../../src/components/ui/AdBanner';
-import { Badge } from '../../src/components/ui/Badge';
 import { Card } from '../../src/components/ui/Card';
 import { SkeletonCard } from '../../src/components/ui/Skeleton';
 import { theme } from '../../src/constants/theme';
@@ -26,17 +25,17 @@ export default function Dashboard() {
   const insets = useSafeAreaInsets();
   const workshopName = useAppStore((s) => s.workshopName);
   const [stats, setStats] = useState<DashboardStats | null>(null);
-  const [recent, setRecent] = useState<Transaction[]>([]);
+  const [pending, setPending] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
   const load = useCallback(async () => {
-    const [s, r] = await Promise.all([
+    const [s, p] = await Promise.all([
       reportService.getDashboardStats(),
-      transactionService.getAll(),
+      transactionService.getAll({ status: 'pending' }),
     ]);
     setStats(s);
-    setRecent(r.slice(0, 5));
+    setPending(p.slice(0, 5));
     setLoading(false);
   }, []);
 
@@ -104,6 +103,12 @@ export default function Dashboard() {
             </Text>
           )}
           <View style={{ flexDirection: 'row', gap: 16, marginTop: 12 }}>
+            <View>
+              <Text style={{ color: 'rgba(255,255,255,0.6)', fontSize: 11 }}>Tahun ini</Text>
+              <Text style={{ color: '#fff', fontSize: 14, fontWeight: '700', marginTop: 2 }}>
+                {stats ? formatCompactCurrency(stats.yearRevenue) : '-'}
+              </Text>
+            </View>
             <View>
               <Text style={{ color: 'rgba(255,255,255,0.6)', fontSize: 11 }}>Bulan ini</Text>
               <Text style={{ color: '#fff', fontSize: 14, fontWeight: '700', marginTop: 2 }}>
@@ -194,6 +199,12 @@ export default function Dashboard() {
           onPress={() => router.push('/customer-form')}
         />
         <QuickAction
+          icon="construct"
+          label="Jasa"
+          color={theme.colors.primaryLight}
+          onPress={() => router.push('/services')}
+        />
+        <QuickAction
           icon="cube"
           label="Sparepart"
           color={theme.colors.success}
@@ -215,137 +226,81 @@ export default function Dashboard() {
 
       <AdBanner />
 
-      {/* Recent transactions */}
-      <View
-        style={{
-          paddingHorizontal: 20,
-          marginTop: 8,
-          marginBottom: 12,
-          flexDirection: 'row',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-        }}
-      >
+      {/* Perhatian — Pending Transactions */}
+      <View style={{ paddingHorizontal: 20, marginTop: 8, marginBottom: 12 }}>
         <Text style={{ color: theme.colors.text, fontSize: 16, fontWeight: '700' }}>
-          Transaksi Terbaru
+          ⚠️ Perhatian
         </Text>
-        <Pressable onPress={() => router.push('/(tabs)/transactions')}>
-          <Text style={{ color: theme.colors.accent, fontSize: 13, fontWeight: '600' }}>
-            Lihat Semua
-          </Text>
-        </Pressable>
       </View>
-
-      <View style={{ paddingHorizontal: 16, gap: 12 }}>
+      <View style={{ paddingHorizontal: 16, gap: 10, marginBottom: 8 }}>
         {loading ? (
-          <>
-            <SkeletonCard />
-            <SkeletonCard />
-          </>
-        ) : recent.length === 0 ? (
+          <SkeletonCard />
+        ) : pending.length === 0 ? (
           <Card>
-            <Text style={{ color: theme.colors.textSecondary, textAlign: 'center', padding: 12 }}>
-              Belum ada transaksi
+            <Text style={{ color: theme.colors.textMuted, textAlign: 'center', padding: 12 }}>
+              Tidak ada transaksi pending
             </Text>
           </Card>
         ) : (
-          recent.map((tx) => {
-            const statusColor =
-              tx.status === 'paid'
-                ? theme.colors.success
-                : tx.status === 'pending'
-                  ? theme.colors.warning
-                  : theme.colors.danger;
-            const initial = (tx.customer_name ?? '?').charAt(0).toUpperCase();
-            return (
-              <Card
-                key={tx.id}
-                onPress={() =>
-                  router.push({ pathname: '/transaction-detail', params: { id: tx.id } })
-                }
-                padding="md"
-              >
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+          pending.map((tx, i) => (
+            <Card
+              key={tx.id ?? `pending-${i}`}
+              onPress={() =>
+                router.push({ pathname: '/transaction-detail', params: { id: tx.id } })
+              }
+              padding="md"
+            >
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                <View
+                  style={{
+                    width: 40,
+                    height: 40,
+                    borderRadius: 10,
+                    backgroundColor: theme.colors.warning + '1F',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    borderWidth: 1,
+                    borderColor: theme.colors.warning + '40',
+                  }}
+                >
+                  <Ionicons name="time" size={20} color={theme.colors.warning} />
+                </View>
+                <View style={{ flex: 1, minWidth: 0 }}>
                   <View
                     style={{
-                      width: 44,
-                      height: 44,
-                      borderRadius: 12,
-                      backgroundColor: statusColor + '1F',
+                      flexDirection: 'row',
+                      justifyContent: 'space-between',
                       alignItems: 'center',
-                      justifyContent: 'center',
-                      borderWidth: 1,
-                      borderColor: statusColor + '40',
+                      gap: 8,
                     }}
                   >
-                    <Text style={{ color: statusColor, fontSize: 16, fontWeight: '800' }}>
-                      {initial}
+                    <Text
+                      style={{
+                        color: theme.colors.text,
+                        fontSize: 14,
+                        fontWeight: '700',
+                        flex: 1,
+                      }}
+                      numberOfLines={1}
+                    >
+                      {tx.customer_name ?? 'Tanpa Pelanggan'}
+                    </Text>
+                    <Text
+                      style={{ color: theme.colors.accent, fontSize: 14, fontWeight: '800' }}
+                    >
+                      {formatCompactCurrency(tx.total_amount)}
                     </Text>
                   </View>
-                  <View style={{ flex: 1, minWidth: 0 }}>
-                    <View
-                      style={{
-                        flexDirection: 'row',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        gap: 8,
-                      }}
-                    >
-                      <Text
-                        style={{
-                          color: theme.colors.text,
-                          fontSize: 14.5,
-                          fontWeight: '700',
-                          flex: 1,
-                        }}
-                        numberOfLines={1}
-                      >
-                        {tx.customer_name ?? 'Tanpa Pelanggan'}
-                      </Text>
-                      <Text
-                        style={{ color: theme.colors.accent, fontSize: 14.5, fontWeight: '800' }}
-                      >
-                        {formatCompactCurrency(tx.total_amount)}
-                      </Text>
-                    </View>
-                    <View
-                      style={{
-                        flexDirection: 'row',
-                        alignItems: 'center',
-                        gap: 6,
-                        marginTop: 5,
-                      }}
-                    >
-                      <Badge
-                        label={
-                          tx.status === 'paid'
-                            ? 'Lunas'
-                            : tx.status === 'pending'
-                              ? 'Pending'
-                              : 'Batal'
-                        }
-                        variant={
-                          tx.status === 'paid'
-                            ? 'success'
-                            : tx.status === 'pending'
-                              ? 'warning'
-                              : 'danger'
-                        }
-                      />
-                      <Text
-                        style={{ color: theme.colors.textMuted, fontSize: 11 }}
-                        numberOfLines={1}
-                      >
-                        {tx.customer_plate ?? '-'} • {formatRelative(tx.created_at)}
-                      </Text>
-                    </View>
-                  </View>
+                  <Text style={{ color: theme.colors.textMuted, fontSize: 11, marginTop: 3 }}>
+                    {tx.customer_plate ?? '-'} • {formatRelative(tx.created_at)} • Pending
+                  </Text>
                 </View>
-              </Card>
-            );
-          })
+              </View>
+            </Card>
+          ))
         )}
       </View>
+
     </ScrollView>
   );
 }

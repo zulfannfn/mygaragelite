@@ -7,4 +7,7 @@ const config = getDefaultConfig(__dirname);
 // Limit transformer workers to reduce per-worker IPC payload.
 config.maxWorkers = 2;
 
+// Support expo-sqlite on web (wa-sqlite.wasm)
+config.resolver.assetExts.push('wasm');
+
 module.exports = withNativeWind(config, { input: './global.css' });

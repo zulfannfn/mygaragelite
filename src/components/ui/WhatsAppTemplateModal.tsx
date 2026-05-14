@@ -55,24 +55,35 @@ export function WhatsAppTemplateModal({
 }: Props) {
   const [selected, setSelected] = useState<TemplateKey | null>(null);
   const [busy, setBusy] = useState(false);
+  const isRetail = tx?.type === 'retail';
 
   const send = async () => {
-    if (!tx || !selected) return;
+    if (!tx || (!isRetail && !selected)) return;
     setBusy(true);
     try {
-      const text =
-        selected === 'created'
-          ? await receiptService.buildWaCreated(tx)
-          : selected === 'ready'
-            ? await receiptService.buildWaReady(tx)
-            : await receiptService.buildWaPaid(tx);
-      const r = await receiptService.sendWhatsAppText(tx.customer_phone ?? '', text);
-      if (!r.ok) {
-        onError?.(r.reason ?? 'Gagal kirim WA');
+      if (isRetail) {
+        const r = await receiptService.sendWhatsApp(tx);
+        if (!r.ok) {
+          onError?.(r.reason ?? 'Gagal kirim WA');
+        } else {
+          onSent?.();
+          onClose();
+        }
       } else {
-        onSent?.();
-        onClose();
-        setSelected(null);
+        const text =
+          selected === 'created'
+            ? await receiptService.buildWaCreated(tx)
+            : selected === 'ready'
+              ? await receiptService.buildWaReady(tx)
+              : await receiptService.buildWaPaid(tx);
+        const r = await receiptService.sendWhatsAppText(tx.customer_phone ?? '', text);
+        if (!r.ok) {
+          onError?.(r.reason ?? 'Gagal kirim WA');
+        } else {
+          onSent?.();
+          onClose();
+          setSelected(null);
+        }
       }
     } finally {
       setBusy(false);
@@ -126,7 +137,7 @@ export function WhatsAppTemplateModal({
 
           <View style={{ paddingHorizontal: 20, marginBottom: 12 }}>
             <Text style={{ color: theme.colors.text, fontSize: 18, fontWeight: '800' }}>
-              Kirim ke WhatsApp
+              {isRetail ? 'Kirim Struk Pembelian' : 'Kirim ke WhatsApp'}
             </Text>
             <Text
               style={{
@@ -135,7 +146,9 @@ export function WhatsAppTemplateModal({
                 marginTop: 4,
               }}
             >
-              Pilih template pesan untuk pelanggan
+              {isRetail
+                ? 'Kirim struk transaksi retail ke WhatsApp pelanggan'
+                : 'Pilih template pesan untuk pelanggan'}
             </Text>
           </View>
 
@@ -168,10 +181,74 @@ export function WhatsAppTemplateModal({
                 style={{ marginTop: 16 }}
               />
             </View>
+          ) : isRetail ? (
+            <>
+              <View style={{ paddingHorizontal: 20, paddingBottom: 8 }}>
+                <View
+                  style={{
+                    backgroundColor: theme.colors.card,
+                    borderRadius: theme.radius.lg,
+                    padding: 16,
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 14,
+                    borderWidth: 1,
+                    borderColor: theme.colors.border,
+                  }}
+                >
+                  <View
+                    style={{
+                      width: 48,
+                      height: 48,
+                      borderRadius: 14,
+                      backgroundColor: theme.colors.success + '25',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    <Ionicons name="receipt" size={24} color={theme.colors.success} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text
+                      style={{
+                        color: theme.colors.text,
+                        fontSize: 15,
+                        fontWeight: '700',
+                      }}
+                    >
+                      Struk Pembelian
+                    </Text>
+                    <Text
+                      style={{
+                        color: theme.colors.textSecondary,
+                        fontSize: 13,
+                        marginTop: 2,
+                        lineHeight: 18,
+                      }}
+                    >
+                      Detail transaksi akan dikirim ke WhatsApp pelanggan
+                    </Text>
+                  </View>
+                </View>
+              </View>
+
+              <View style={{ paddingHorizontal: 20, paddingTop: 8, gap: 10 }}>
+                <Button
+                  title="Kirim via WhatsApp"
+                  variant="success"
+                  size="lg"
+                  fullWidth
+                  loading={busy}
+                  onPress={send}
+                  icon={<Ionicons name="logo-whatsapp" size={20} color="#fff" />}
+                />
+                <Button title="Batal" variant="ghost" fullWidth onPress={close} />
+              </View>
+            </>
           ) : (
             <>
               <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 8 }}>
-                {TEMPLATES.map((tpl) => {
+                {TEMPLATES.filter((tpl) => tpl.key !== 'paid' || tx?.status === 'paid').map((tpl) => {
                   const active = selected === tpl.key;
                   return (
                     <Pressable

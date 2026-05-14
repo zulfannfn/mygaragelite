@@ -56,15 +56,15 @@ export const receiptService = {
     lines.push(
       `Pelanggan: ${tx.customer_name ?? '-'}${tx.customer_plate ? ` (${tx.customer_plate})` : ''}`
     );
-    if (tx.mechanic_name) lines.push(`Mekanik  : ${tx.mechanic_name}`);
+    if (tx.mechanic_name && tx.type !== 'retail') lines.push(`Mekanik  : ${tx.mechanic_name}`);
     lines.push(sep);
 
-    if (tx.complaint && tx.complaint.trim()) {
+    if (tx.complaint && tx.complaint.trim() && tx.type !== 'retail') {
       lines.push(`Keluhan: ${tx.complaint.trim()}`);
       lines.push('');
     }
 
-    if (tx.service_items && tx.service_items.length > 0) {
+    if (tx.service_items && tx.service_items.length > 0 && tx.type !== 'retail') {
       lines.push('JASA:');
       for (const s of tx.service_items) {
         lines.push(`- ${s.service_name}`);
@@ -85,12 +85,16 @@ export const receiptService = {
     }
 
     lines.push(sep);
-    lines.push(`Subtotal Jasa     : ${formatCurrency(tx.total_service)}`);
+    if (tx.type !== 'retail') lines.push(`Subtotal Jasa     : ${formatCurrency(tx.total_service)}`);
     lines.push(`Subtotal Sparepart: ${formatCurrency(tx.total_sparepart)}`);
     lines.push(`*TOTAL            : ${formatCurrency(tx.total_amount)}*`);
+    if (tx.type === 'retail' && tx.payment_method === 'Tunai' && tx.paid_amount > 0) {
+      lines.push(`Bayar             : ${formatCurrency(tx.paid_amount)}`);
+      lines.push(`Kembali           : ${formatCurrency(tx.change_amount)}`);
+    }
     lines.push(`Status: ${statusLabel(tx.status)}${tx.payment_method ? ` (${tx.payment_method})` : ''}`);
 
-    if (tx.recommendation && tx.recommendation.trim()) {
+    if (tx.recommendation && tx.recommendation.trim() && tx.type !== 'retail') {
       lines.push('');
       lines.push(`Rekomendasi: ${tx.recommendation.trim()}`);
     }
@@ -160,21 +164,21 @@ export const receiptService = {
           <div><b>No:</b> ${shortId(tx.id)}</div>
           <div><b>Tanggal:</b> ${formatDateTime(tx.created_at)}</div>
           <div><b>Pelanggan:</b> ${escapeHtml(tx.customer_name ?? '-')}${tx.customer_plate ? ` (${escapeHtml(tx.customer_plate)})` : ''}</div>
-          ${tx.mechanic_name ? `<div><b>Mekanik:</b> ${escapeHtml(tx.mechanic_name)}</div>` : ''}
+          ${tx.mechanic_name && tx.type !== 'retail' ? `<div><b>Mekanik:</b> ${escapeHtml(tx.mechanic_name)}</div>` : ''}
           <div style="margin-top:6px">
-            <span class="status ${tx.status}">${statusLabel(tx.status)}</span>
+            <span class="status ${tx.status}">${statusLabel(tx.status)}${tx.type === 'retail' ? ' - KASIR' : ''}</span>
             ${tx.payment_method ? `<span style="margin-left:6px;font-size:12px;color:#555">${escapeHtml(tx.payment_method)}</span>` : ''}
           </div>
         </div>
 
         ${
-          tx.complaint && tx.complaint.trim()
+          tx.complaint && tx.complaint.trim() && tx.type !== 'retail'
             ? `<div class="section-title">Keluhan</div><div class="note">${escapeHtml(tx.complaint)}</div>`
             : ''
         }
 
         ${
-          serviceRows
+          serviceRows && tx.type !== 'retail'
             ? `<div class="section-title">Jasa Servis</div>
                <table>${serviceRows}</table>`
             : ''
@@ -188,13 +192,22 @@ export const receiptService = {
         }
 
         <div class="totals">
-          <div class="row"><span>Subtotal Jasa</span><span>${formatCurrency(tx.total_service)}</span></div>
+          ${tx.type !== 'retail' ? `<div class="row"><span>Subtotal Jasa</span><span>${formatCurrency(tx.total_service)}</span></div>` : ''}
           <div class="row"><span>Subtotal Sparepart</span><span>${formatCurrency(tx.total_sparepart)}</span></div>
           <div class="row grand"><span>TOTAL</span><span>${formatCurrency(tx.total_amount)}</span></div>
+          ${tx.type === 'retail' && tx.payment_method === 'Tunai' && tx.paid_amount > 0 ? `<div class="row"><span>Bayar</span><span>${formatCurrency(tx.paid_amount)}</span></div>` : ''}
+          ${tx.type === 'retail' && tx.payment_method === 'Tunai' && tx.change_amount > 0 ? `<div class="row"><span>Kembali</span><span>${formatCurrency(tx.change_amount)}</span></div>` : ''}
         </div>
 
         ${
-          tx.recommendation && tx.recommendation.trim()
+          tx.mechanic_notes && tx.mechanic_notes.trim() && tx.type !== 'retail'
+            ? `<div class="section-title">Catatan Internal Mekanik</div>
+               <div class="note">${escapeHtml(tx.mechanic_notes)}</div>`
+            : ''
+        }
+
+        ${
+          tx.recommendation && tx.recommendation.trim() && tx.type !== 'retail'
             ? `<div class="section-title">Rekomendasi Servis Berikutnya</div>
                <div class="note">${escapeHtml(tx.recommendation)}</div>`
             : ''
@@ -205,13 +218,80 @@ export const receiptService = {
     </html>`;
   },
 
+  async buildPendingHtml(tx: Transaction, shopOverride?: Partial<ShopInfo>): Promise<string> {
+    const shop = await getShopInfo(shopOverride);
+    return `
+    <html>
+      <head>
+        <meta charset="utf-8" />
+        <style>
+          * { box-sizing: border-box; }
+          body { font-family: -apple-system, system-ui, 'Segoe UI', sans-serif; padding: 18px; color: #222; }
+          .header { text-align: center; border-bottom: 2px dashed #999; padding-bottom: 10px; margin-bottom: 12px; }
+          .shop-name { font-size: 20px; font-weight: 800; color: #FF6B35; margin: 0; }
+          .shop-info { font-size: 12px; color: #555; margin: 2px 0 0; }
+          .banner { background: #FFB80022; border: 2px dashed #FFB800; border-radius: 10px; padding: 14px; text-align: center; margin: 14px 0; }
+          .banner-title { font-size: 16px; font-weight: 800; color: #a07700; margin: 0; }
+          .banner-sub { font-size: 12px; color: #a07700; margin-top: 4px; }
+          .meta { font-size: 13px; margin-bottom: 10px; }
+          .meta div { margin: 3px 0; }
+          .section-title { font-size: 11px; font-weight: 700; letter-spacing: 1px; color:#777; margin: 12px 0 4px; text-transform: uppercase; }
+          .note { background: #f5f5f7; padding: 10px 12px; border-radius: 8px; font-size: 13px; margin-top: 6px; line-height: 1.5; }
+          .note strong { color: #FF6B35; }
+          .status-box { background: #00C89622; border-radius: 8px; padding: 10px 12px; margin-top: 12px; }
+          .status-box .label { font-size: 11px; font-weight: 700; color: #00865f; text-transform: uppercase; letter-spacing: 0.5px; }
+          .status-box .value { font-size: 13px; color: #222; margin-top: 2px; }
+          .footer { text-align: center; margin-top: 18px; font-size: 12px; color: #888; }
+          .footer strong { color: #444; }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <p class="shop-name">${escapeHtml(shop.name)}</p>
+          ${shop.address ? `<p class="shop-info">${escapeHtml(shop.address)}</p>` : ''}
+          ${shop.phone ? `<p class="shop-info">Telp: ${escapeHtml(shop.phone)}</p>` : ''}
+        </div>
+
+        <div class="banner">
+          <p class="banner-title">ORDER BERHASIL DIBUAT</p>
+          <p class="banner-sub">Kendaraan sedang dalam proses servis</p>
+        </div>
+
+        <div class="meta">
+          <div><b>No Servis:</b> ${shortId(tx.id)}</div>
+          <div><b>Tanggal:</b> ${formatDateTime(tx.created_at)}</div>
+          <div><b>Pelanggan:</b> ${escapeHtml(tx.customer_name ?? '-')}${tx.customer_plate ? ` (${escapeHtml(tx.customer_plate)})` : ''}</div>
+          ${tx.mechanic_name ? `<div><b>Mekanik:</b> ${escapeHtml(tx.mechanic_name)}</div>` : ''}
+        </div>
+
+        ${
+          tx.complaint && tx.complaint.trim()
+            ? `<div class="section-title">Keluhan Pelanggan</div><div class="note"><strong>Keluhan:</strong> ${escapeHtml(tx.complaint)}</div>`
+            : ''
+        }
+
+        <div class="status-box">
+          <div class="label">Status</div>
+          <div class="value">${statusLabel(tx.status)} — Kendaraan sedang dikerjakan oleh mekanik. Kami akan menghubungi Anda setelah servis selesai.</div>
+        </div>
+
+        <div class="footer">
+          <strong>Terima kasih atas kepercayaan Anda 🙏</strong><br/>
+          Cetak via MyGarage Lite
+        </div>
+      </body>
+    </html>`;
+  },
+
   async printPdf(tx: Transaction, shopOverride?: Partial<ShopInfo>): Promise<void> {
-    const html = await this.buildHtml(tx, shopOverride);
+    const html = tx.status === 'pending'
+      ? await this.buildPendingHtml(tx, shopOverride)
+      : await this.buildHtml(tx, shopOverride);
     const { uri } = await Print.printToFileAsync({ html });
     if (await Sharing.isAvailableAsync()) {
       await Sharing.shareAsync(uri, {
         mimeType: 'application/pdf',
-        dialogTitle: 'Struk Servis',
+        dialogTitle: tx.status === 'pending' ? 'Order Dibuat' : 'Struk Servis',
       });
     }
   },

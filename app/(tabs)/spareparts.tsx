@@ -1,11 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
 import React, { useCallback, useMemo, useState } from 'react';
-import { FlatList, Pressable, ScrollView, Text, View } from 'react-native';
+import { FlatList, Modal, Pressable, ScrollView, Text, View } from 'react-native';
 import { Badge } from '../../src/components/ui/Badge';
 import { Card } from '../../src/components/ui/Card';
 import { EmptyState } from '../../src/components/ui/EmptyState';
-import { FilterChip } from '../../src/components/ui/FilterChip';
 import { ScreenHeader } from '../../src/components/ui/ScreenHeader';
 import { SearchBar } from '../../src/components/ui/SearchBar';
 import { SkeletonCard } from '../../src/components/ui/Skeleton';
@@ -19,6 +18,8 @@ export default function SparepartsScreen() {
   const router = useRouter();
   const { spareparts, loading, search, setSearch, load } = useSparepartStore();
   const [filter, setFilter] = useState<FilterKey>('all');
+  const [filterModalOpen, setFilterModalOpen] = useState(false);
+  const [tempFilter, setTempFilter] = useState<FilterKey>('all');
 
   useFocusEffect(
     useCallback(() => {
@@ -76,8 +77,6 @@ export default function SparepartsScreen() {
     count: spareparts.filter((s) => s.category === c).length,
   }));
 
-  const isStatusFilter = filter === 'all' || filter === 'low' || filter === 'out';
-
   return (
     <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
       <ScreenHeader
@@ -101,93 +100,113 @@ export default function SparepartsScreen() {
         }
       />
 
-      <SearchBar value={search} onChangeText={setSearch} placeholder="Cari sparepart..." />
-
-      {/* Status filter row */}
-      <View style={{ height: 52 }}>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={{
-            paddingHorizontal: 16,
-            paddingVertical: 8,
-            gap: 8,
-            alignItems: 'center',
-          }}
-        >
-          {statusChips.map((chip) => (
-            <FilterChip
-              key={chip.key}
-              label={chip.label}
-              icon={chip.icon}
-              count={chip.count}
-              color={chip.color}
-              active={filter === chip.key}
-              onPress={() => setFilter(chip.key)}
-            />
-          ))}
-        </ScrollView>
-      </View>
-
-      {/* Category filter row (only show if there are categories) */}
-      {categoryChips.length > 0 && (
-        <View>
-          <View
-            style={{
-              flexDirection: 'row',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              paddingHorizontal: 18,
-              marginTop: 4,
-              marginBottom: 2,
+      <SearchBar
+        value={search}
+        onChangeText={setSearch}
+        placeholder="Cari sparepart..."
+        rightElement={
+          <Pressable
+            onPress={() => {
+              setTempFilter(filter);
+              setFilterModalOpen(true);
             }}
+            hitSlop={6}
+            style={({ pressed }) => ({
+              width: 32,
+              height: 32,
+              borderRadius: 16,
+              backgroundColor: filter !== 'all' ? theme.colors.accent + '22' : 'transparent',
+              alignItems: 'center',
+              justifyContent: 'center',
+              opacity: pressed ? 0.7 : 1,
+              marginLeft: 4,
+            })}
           >
-            <Text
+            <Ionicons
+              name="options-outline"
+              size={18}
+              color={filter !== 'all' ? theme.colors.accent : theme.colors.textMuted}
+            />
+          </Pressable>
+        }
+      />
+
+      {/* Active filter chip */}
+      {filter !== 'all' && (
+        <View style={{ paddingHorizontal: 16, marginBottom: 8 }}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+            <Pressable
+              onPress={() => setFilter('all')}
               style={{
-                color: theme.colors.textMuted,
-                fontSize: 10,
-                fontWeight: '700',
-                letterSpacing: 1,
-              }}
-            >
-              KATEGORI
-            </Text>
-            {!isStatusFilter ? (
-              <Pressable onPress={() => setFilter('all')} hitSlop={8}>
-                <Text
-                  style={{
-                    color: theme.colors.accent,
-                    fontSize: 11,
-                    fontWeight: '700',
-                  }}
-                >
-                  Reset
-                </Text>
-              </Pressable>
-            ) : null}
-          </View>
-          <View style={{ height: 48, marginBottom: 4 }}>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={{
-                paddingHorizontal: 16,
-                paddingVertical: 6,
-                gap: 8,
+                flexDirection: 'row',
                 alignItems: 'center',
+                gap: 4,
+                paddingHorizontal: 10,
+                paddingVertical: 5,
+                borderRadius: theme.radius.md,
+                backgroundColor:
+                  (filter === 'low'
+                    ? theme.colors.warning
+                    : filter === 'out'
+                      ? theme.colors.danger
+                      : theme.colors.accent) + '18',
+                borderWidth: 1,
+                borderColor:
+                  filter === 'low'
+                    ? theme.colors.warning
+                    : filter === 'out'
+                      ? theme.colors.danger
+                      : theme.colors.accent,
               }}
             >
-              {categoryChips.map((chip) => (
-                <FilterChip
-                  key={chip.key}
-                  label={chip.label}
-                  count={chip.count}
-                  active={filter === chip.key}
-                  onPress={() => setFilter(chip.key)}
-                />
-              ))}
-            </ScrollView>
-          </View>
+              <Ionicons
+                name={
+                  filter === 'low'
+                    ? 'warning'
+                    : filter === 'out'
+                      ? 'close-circle'
+                      : 'pricetag'
+                }
+                size={12}
+                color={
+                  filter === 'low'
+                    ? theme.colors.warning
+                    : filter === 'out'
+                      ? theme.colors.danger
+                      : theme.colors.accent
+                }
+              />
+              <Text
+                style={{
+                  color:
+                    filter === 'low'
+                      ? theme.colors.warning
+                      : filter === 'out'
+                        ? theme.colors.danger
+                        : theme.colors.accent,
+                  fontSize: 11,
+                  fontWeight: '700',
+                }}
+              >
+                {filter === 'low'
+                  ? 'Stok Menipis'
+                  : filter === 'out'
+                    ? 'Habis'
+                    : filter}
+              </Text>
+              <Ionicons
+                name="close"
+                size={12}
+                color={
+                  filter === 'low'
+                    ? theme.colors.warning
+                    : filter === 'out'
+                      ? theme.colors.danger
+                      : theme.colors.accent
+                }
+              />
+            </Pressable>
+          </ScrollView>
         </View>
       )}
 
@@ -340,6 +359,170 @@ export default function SparepartsScreen() {
           }}
         />
       )}
+
+      {/* Filter Modal */}
+      <Modal
+        visible={filterModalOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setFilterModalOpen(false)}
+      >
+        <Pressable
+          style={{
+            flex: 1,
+            backgroundColor: 'rgba(0,0,0,0.6)',
+            justifyContent: 'center',
+            padding: 24,
+          }}
+          onPress={() => setFilterModalOpen(false)}
+        >
+          <View
+            style={{
+              backgroundColor: theme.colors.card,
+              borderRadius: theme.radius.xl,
+              padding: 20,
+              borderWidth: 1,
+              borderColor: theme.colors.border,
+            }}
+          >
+            <Text
+              style={{
+                color: theme.colors.text,
+                fontSize: 16,
+                fontWeight: '700',
+                marginBottom: 16,
+              }}
+            >
+              Filter Sparepart
+            </Text>
+
+            {/* Status */}
+            <Text style={{ color: theme.colors.textSecondary, fontSize: 12, fontWeight: '600', marginBottom: 8 }}>
+              Status Stok
+            </Text>
+            <View style={{ flexDirection: 'row', gap: 8, marginBottom: 16 }}>
+              {statusChips.map((chip) => {
+                const active = tempFilter === chip.key;
+                return (
+                  <Pressable
+                    key={chip.key}
+                    onPress={() => setTempFilter(chip.key)}
+                    style={{
+                      flex: 1,
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 6,
+                      paddingVertical: 10,
+                      borderRadius: theme.radius.lg,
+                      backgroundColor: active ? (chip.color ?? theme.colors.primary) : theme.colors.cardLight,
+                      borderWidth: 1,
+                      borderColor: active ? (chip.color ?? theme.colors.primary) : theme.colors.border,
+                    }}
+                  >
+                    <Ionicons
+                      name={chip.icon}
+                      size={14}
+                      color={active ? '#fff' : theme.colors.textSecondary}
+                    />
+                    <Text
+                      style={{
+                        color: active ? '#fff' : theme.colors.text,
+                        fontSize: 12,
+                        fontWeight: '600',
+                      }}
+                    >
+                      {chip.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+
+            {/* Categories */}
+            {categoryChips.length > 0 && (
+              <>
+                <Text
+                  style={{
+                    color: theme.colors.textSecondary,
+                    fontSize: 12,
+                    fontWeight: '600',
+                    marginBottom: 8,
+                  }}
+                >
+                  Kategori
+                </Text>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
+                  {categoryChips.map((chip) => {
+                    const active = tempFilter === chip.key;
+                    return (
+                      <Pressable
+                        key={chip.key}
+                        onPress={() => setTempFilter(chip.key)}
+                        style={{
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          gap: 6,
+                          paddingVertical: 8,
+                          paddingHorizontal: 12,
+                          borderRadius: theme.radius.lg,
+                          backgroundColor: active ? theme.colors.accent : theme.colors.cardLight,
+                          borderWidth: 1,
+                          borderColor: active ? theme.colors.accent : theme.colors.border,
+                        }}
+                      >
+                        <Text
+                          style={{
+                            color: active ? '#fff' : theme.colors.text,
+                            fontSize: 12,
+                            fontWeight: '600',
+                          }}
+                        >
+                          {chip.label}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </>
+            )}
+
+            <View style={{ flexDirection: 'row', gap: 10 }}>
+              <Pressable
+                onPress={() => {
+                  setFilter(tempFilter);
+                  setFilterModalOpen(false);
+                }}
+                style={{
+                  flex: 1,
+                  backgroundColor: theme.colors.accent,
+                  paddingVertical: 12,
+                  borderRadius: theme.radius.lg,
+                  alignItems: 'center',
+                }}
+              >
+                <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>Terapkan</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => {
+                  setTempFilter('all');
+                  setFilter('all');
+                  setFilterModalOpen(false);
+                }}
+                style={{
+                  flex: 1,
+                  backgroundColor: theme.colors.cardLight,
+                  paddingVertical: 12,
+                  borderRadius: theme.radius.lg,
+                  alignItems: 'center',
+                }}
+              >
+                <Text style={{ color: theme.colors.textSecondary, fontWeight: '700', fontSize: 14 }}>Reset</Text>
+              </Pressable>
+            </View>
+          </View>
+        </Pressable>
+      </Modal>
     </View>
   );
 }

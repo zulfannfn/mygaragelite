@@ -7,9 +7,10 @@ interface Props {
   value: string;
   onChangeText: (s: string) => void;
   placeholder?: string;
+  rightElement?: React.ReactNode;
 }
 
-export function SearchBar({ value, onChangeText, placeholder = 'Cari...' }: Props) {
+export function SearchBar({ value, onChangeText, placeholder = 'Cari...', rightElement }: Props) {
   return (
     <View
       style={{
@@ -43,6 +44,7 @@ export function SearchBar({ value, onChangeText, placeholder = 'Cari...' }: Prop
           <Ionicons name="close-circle" size={18} color={theme.colors.textMuted} />
         </Pressable>
       )}
+      {rightElement}
     </View>
   );
 }

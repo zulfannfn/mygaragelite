@@ -31,6 +31,9 @@ CREATE TABLE IF NOT EXISTS transactions (
   mechanic_notes TEXT DEFAULT '',
   status TEXT DEFAULT 'pending',
   payment_method TEXT,
+  type TEXT DEFAULT 'service',
+  paid_amount REAL DEFAULT 0,
+  change_amount REAL DEFAULT 0,
   total_service REAL DEFAULT 0,
   total_sparepart REAL DEFAULT 0,
   total_amount REAL DEFAULT 0,
@@ -93,6 +96,15 @@ CREATE TABLE IF NOT EXISTS employees (
   updated_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_employees_active ON employees(is_active);
+
+CREATE TABLE IF NOT EXISTS services (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  price REAL DEFAULT 0,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_services_name ON services(name);
 `;
 
 async function addColumnIfMissing(
@@ -113,4 +125,7 @@ export async function runMigrations(db: SQLite.SQLiteDatabase): Promise<void> {
   await addColumnIfMissing(db, 'transactions', 'mechanic_id', 'TEXT');
   await addColumnIfMissing(db, 'transactions', 'complaint', "TEXT DEFAULT ''");
   await addColumnIfMissing(db, 'transactions', 'recommendation', "TEXT DEFAULT ''");
+  await addColumnIfMissing(db, 'transactions', 'type', "TEXT DEFAULT 'service'");
+  await addColumnIfMissing(db, 'transactions', 'paid_amount', 'REAL DEFAULT 0');
+  await addColumnIfMissing(db, 'transactions', 'change_amount', 'REAL DEFAULT 0');
 }

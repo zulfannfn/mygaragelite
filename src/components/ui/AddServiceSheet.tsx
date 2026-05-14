@@ -1,8 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Modal, Pressable, ScrollView, Text, View } from 'react-native';
-import { SERVICE_PRESETS } from '../../constants/config';
 import { theme } from '../../constants/theme';
+import { serviceService } from '../../services/serviceService';
 import { formatCurrency, parseCurrency } from '../../utils/currency';
 import { Button } from './Button';
 import { Input } from './Input';
@@ -17,12 +17,24 @@ export function AddServiceSheet({ visible, onClose, onAdd }: Props) {
   const [customName, setCustomName] = useState('');
   const [customPrice, setCustomPrice] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
+  const [services, setServices] = useState<{ name: string; price: number }[]>([]);
+  const [loading, setLoading] = useState(false);
 
-  const filteredPresets = useMemo(() => {
-    if (!searchQuery.trim()) return SERVICE_PRESETS;
+  useEffect(() => {
+    if (visible) {
+      setLoading(true);
+      serviceService.getAll().then((data) => {
+        setServices(data.map((s) => ({ name: s.name, price: s.price })));
+        setLoading(false);
+      }).catch(() => setLoading(false));
+    }
+  }, [visible]);
+
+  const filteredServices = useMemo(() => {
+    if (!searchQuery.trim()) return services;
     const q = searchQuery.toLowerCase();
-    return SERVICE_PRESETS.filter((p) => p.name.toLowerCase().includes(q));
-  }, [searchQuery]);
+    return services.filter((p) => p.name.toLowerCase().includes(q));
+  }, [searchQuery, services]);
 
   const reset = () => {
     setCustomName('');
@@ -35,11 +47,17 @@ export function AddServiceSheet({ visible, onClose, onAdd }: Props) {
     onClose();
   };
 
-  const submitCustom = () => {
+  const submitCustom = async () => {
     if (!customName.trim()) return;
+    const price = parseCurrency(customPrice);
+    try {
+      await serviceService.create({ name: customName.trim(), price });
+    } catch {
+      // ignore duplicate / silent fail
+    }
     onAdd({
       service_name: customName.trim(),
-      price: parseCurrency(customPrice),
+      price,
     });
     reset();
   };
@@ -87,7 +105,7 @@ export function AddServiceSheet({ visible, onClose, onAdd }: Props) {
                 marginTop: 4,
               }}
             >
-              Pilih dari preset atau buat sendiri
+              Pilih jasa atau buat sendiri
             </Text>
           </View>
 
@@ -97,7 +115,6 @@ export function AddServiceSheet({ visible, onClose, onAdd }: Props) {
               onChangeText={setSearchQuery}
               placeholder="Cari jasa..."
               leftIcon={<Ionicons name="search" size={18} color={theme.colors.textSecondary} />}
-              style={{ marginBottom: 12 }}
             />
 
             <Text
@@ -107,55 +124,65 @@ export function AddServiceSheet({ visible, onClose, onAdd }: Props) {
                 fontWeight: '700',
                 letterSpacing: 1,
                 marginBottom: 8,
-                marginLeft: 4,
+                marginTop: 4,
               }}
             >
-              PRESET
+              JASA
             </Text>
-            {filteredPresets.map((preset, i) => (
-              <Pressable
-                key={i}
-                onPress={() => {
-                  onAdd({ service_name: preset.name, price: preset.price });
-                }}
-                style={({ pressed }) => ({
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  gap: 12,
-                  paddingHorizontal: 16,
-                  paddingVertical: 14,
-                  backgroundColor: pressed ? theme.colors.cardLight : theme.colors.card,
-                  borderRadius: theme.radius.lg,
-                  marginBottom: 10,
-                  borderWidth: 1,
-                  borderColor: theme.colors.border,
-                })}
-              >
-                <View
-                  style={{
-                    width: 40,
-                    height: 40,
-                    borderRadius: 10,
-                    backgroundColor: theme.colors.accent + '15',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    flexShrink: 0,
+            {loading ? (
+              <Text style={{ color: theme.colors.textMuted, textAlign: 'center', padding: 12 }}>
+                Memuat...
+              </Text>
+            ) : filteredServices.length === 0 ? (
+              <Text style={{ color: theme.colors.textMuted, textAlign: 'center', padding: 12 }}>
+                Tidak ada jasa
+              </Text>
+            ) : (
+              filteredServices.map((svc, i) => (
+                <Pressable
+                  key={`${svc.name}-${i}`}
+                  onPress={() => {
+                    onAdd({ service_name: svc.name, price: svc.price });
                   }}
+                  style={({ pressed }) => ({
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 12,
+                    paddingHorizontal: 16,
+                    paddingVertical: 14,
+                    backgroundColor: pressed ? theme.colors.cardLight : theme.colors.card,
+                    borderRadius: theme.radius.lg,
+                    marginBottom: 10,
+                    borderWidth: 1,
+                    borderColor: theme.colors.border,
+                  })}
                 >
-                  <Ionicons name="build" size={18} color={theme.colors.accent} />
-                </View>
-                <Text
-                  style={{ color: theme.colors.text, fontSize: 15, fontWeight: '600', flex: 1 }}
-                >
-                  {preset.name}
-                </Text>
-                <Text
-                  style={{ color: theme.colors.accent, fontSize: 15, fontWeight: '700', flexShrink: 0, marginLeft: 8 }}
-                >
-                  {formatCurrency(preset.price)}
-                </Text>
-              </Pressable>
-            ))}
+                  <View
+                    style={{
+                      width: 40,
+                      height: 40,
+                      borderRadius: 10,
+                      backgroundColor: theme.colors.accent + '15',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0,
+                    }}
+                  >
+                    <Ionicons name="build" size={18} color={theme.colors.accent} />
+                  </View>
+                  <Text
+                    style={{ color: theme.colors.text, fontSize: 15, fontWeight: '600', flex: 1 }}
+                  >
+                    {svc.name}
+                  </Text>
+                  <Text
+                    style={{ color: theme.colors.accent, fontSize: 15, fontWeight: '700', flexShrink: 0, marginLeft: 8 }}
+                  >
+                    {formatCurrency(svc.price)}
+                  </Text>
+                </Pressable>
+              ))
+            )}
 
             <Text
               style={{
@@ -165,7 +192,6 @@ export function AddServiceSheet({ visible, onClose, onAdd }: Props) {
                 letterSpacing: 1,
                 marginTop: 12,
                 marginBottom: 8,
-                marginLeft: 4,
               }}
             >
               JASA KUSTOM

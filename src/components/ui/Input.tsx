@@ -22,13 +22,13 @@ export function Input({
   const [focused, setFocused] = useState(false);
 
   return (
-    <View style={[{ marginBottom: 12 }, containerStyle]}>
+    <View style={[{ marginBottom: 8 }, containerStyle]}>
       {label && (
         <Text
           style={{
             color: theme.colors.textSecondary,
             fontSize: 13,
-            marginBottom: 6,
+            marginBottom: 4,
             fontWeight: '500',
           }}
         >

@@ -21,7 +21,7 @@ export function ScreenHeader({ title, subtitle, showBack, rightElement }: Props)
       style={{
         paddingTop: insets.top + 8,
         paddingHorizontal: 20,
-        paddingBottom: 16,
+        paddingBottom: 12,
         backgroundColor: theme.colors.background,
         flexDirection: 'row',
         alignItems: 'center',
