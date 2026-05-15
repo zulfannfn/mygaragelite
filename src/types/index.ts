@@ -60,6 +60,8 @@ export interface Transaction {
   customer_phone?: string;
   mechanic_id?: string | null;
   mechanic_name?: string | null;
+  cashier_id?: string | null;
+  cashier_name?: string | null;
   complaint: string;
   recommendation: string;
   mechanic_notes: string;
@@ -136,6 +138,12 @@ export interface TopService {
   name: string;
   totalSold: number;
   revenue: number;
+}
+
+export interface CategoryStats {
+  category: string;
+  totalRevenue: number;
+  itemsSold: number;
 }
 
 export interface TopMechanic {

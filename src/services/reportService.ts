@@ -264,4 +264,28 @@ export const reportService = {
       limit
     );
   },
+
+  async getCategoryStats(
+    limit: number = 10,
+    start?: number,
+    end?: number
+  ): Promise<CategoryStats[]> {
+    const db = await getDatabase();
+    const hasRange = start !== undefined && end !== undefined;
+    return await db.getAllAsync<CategoryStats>(
+      `SELECT
+         COALESCE(s.category, 'Tanpa Kategori') as category,
+         SUM(tsp.quantity * tsp.sell_price) as totalRevenue,
+         SUM(tsp.quantity) as itemsSold
+       FROM transaction_spareparts tsp
+       JOIN transactions t ON t.id = tsp.transaction_id
+       LEFT JOIN spareparts s ON s.id = tsp.sparepart_id
+       WHERE t.status = 'paid' ${hasRange ? 'AND t.created_at BETWEEN ? AND ?' : ''}
+       GROUP BY s.category
+       ORDER BY totalRevenue DESC
+       LIMIT ?`,
+      ...(hasRange ? [start, end] : []),
+      limit
+    );
+  },
 };

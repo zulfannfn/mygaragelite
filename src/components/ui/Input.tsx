@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Text, TextInput, TextInputProps, View, ViewStyle } from 'react-native';
-import { theme } from '../../constants/theme';
+import { useTheme } from '../../contexts/ThemeContext';
 
 interface Props extends TextInputProps {
   label?: string;
@@ -19,6 +19,7 @@ export function Input({
   style,
   ...rest
 }: Props) {
+  const { theme } = useTheme();
   const [focused, setFocused] = useState(false);
 
   return (

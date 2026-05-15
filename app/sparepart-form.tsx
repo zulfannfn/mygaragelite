@@ -7,7 +7,7 @@ import { Input } from '../src/components/ui/Input';
 import { Picker } from '../src/components/ui/Picker';
 import { ScreenHeader } from '../src/components/ui/ScreenHeader';
 import { SPAREPART_CATEGORIES } from '../src/constants/config';
-import { theme } from '../src/constants/theme';
+import { useTheme } from '../src/contexts/ThemeContext';
 import { sparepartService } from '../src/services/sparepartService';
 import { useAppStore } from '../src/store/useAppStore';
 import { useSparepartStore } from '../src/store/useSparepartStore';
@@ -19,10 +19,13 @@ export default function SparepartForm() {
   const { id } = useLocalSearchParams<{ id?: string }>();
   const isEdit = !!id;
   const showToast = useAppStore((s) => s.showToast);
+  const { theme } = useTheme();
   const { add, update, remove } = useSparepartStore();
 
   const [name, setName] = useState('');
   const [category, setCategory] = useState<string>('Lainnya');
+  const [customCategory, setCustomCategory] = useState('');
+  const [showCustomCategory, setShowCustomCategory] = useState(false);
   const [stock, setStock] = useState('0');
   const [minStock, setMinStock] = useState('5');
   const [buyPrice, setBuyPrice] = useState('');
@@ -57,9 +60,10 @@ export default function SparepartForm() {
     if (!validate()) return;
     setLoading(true);
     try {
+      const finalCategory = showCustomCategory && customCategory.trim() ? customCategory.trim() : category;
       const input = {
         name: name.trim(),
-        category,
+        category: finalCategory,
         stock: parseInt(stock || '0', 10),
         min_stock: parseInt(minStock || '0', 10),
         buy_price: parseCurrency(buyPrice),
@@ -95,7 +99,7 @@ export default function SparepartForm() {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={{ flex: 1 }}
       >
-        <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 40 }}>
+        <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 40 + (Platform.OS === 'android' ? 48 : 34) }}>
           <Input
             label="Nama Sparepart *"
             value={name}
@@ -106,9 +110,37 @@ export default function SparepartForm() {
           <Picker
             label="Kategori"
             value={category}
-            options={SPAREPART_CATEGORIES}
-            onChange={setCategory}
+            options={[...SPAREPART_CATEGORIES, 'Tambah Kategori Baru']}
+            optionIcons={{
+              'Oli': 'water',
+              'Filter': 'filter',
+              'Ban': 'bicycle',
+              'Kampas Rem': 'car',
+              'Aki': 'flash',
+              'Busi': 'flash',
+              'Lampu': 'bulb',
+              'Body': 'car',
+              'Mesin': 'construct',
+              'Lainnya': 'list',
+              'Tambah Kategori Baru': 'add',
+            }}
+            onChange={(v) => {
+              if (v === 'Tambah Kategori Baru') {
+                setShowCustomCategory(true);
+              } else {
+                setCategory(v);
+                setShowCustomCategory(false);
+              }
+            }}
           />
+          {showCustomCategory && (
+            <Input
+              label="Nama Kategori Baru"
+              value={customCategory}
+              onChangeText={setCustomCategory}
+              placeholder="Masukkan nama kategori"
+            />
+          )}
           <View style={{ flexDirection: 'row', gap: 10 }}>
             <View style={{ flex: 1 }}>
               <Input

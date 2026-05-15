@@ -1,6 +1,6 @@
 import React from 'react';
 import { Text, View, ViewStyle } from 'react-native';
-import { theme } from '../../constants/theme';
+import { useTheme } from '../../contexts/ThemeContext';
 
 type Variant = 'success' | 'warning' | 'danger' | 'info' | 'neutral' | 'accent';
 
@@ -11,6 +11,7 @@ interface Props {
 }
 
 export function Badge({ label, variant = 'neutral', style }: Props) {
+  const { theme } = useTheme();
   const colors: Record<Variant, { bg: string; fg: string }> = {
     success: { bg: 'rgba(0,200,150,0.15)', fg: theme.colors.success },
     warning: { bg: 'rgba(255,184,0,0.15)', fg: theme.colors.warning },

@@ -25,6 +25,13 @@ export const employeeService = {
     );
   },
 
+  async getCashiers(): Promise<Employee[]> {
+    const db = await getDatabase();
+    return await db.getAllAsync<Employee>(
+      `SELECT * FROM employees WHERE is_active = 1 AND role = 'Kasir' ORDER BY name ASC`
+    );
+  },
+
   async getById(id: string): Promise<Employee | null> {
     const db = await getDatabase();
     const row = await db.getFirstAsync<Employee>(

@@ -12,16 +12,30 @@ export interface SparepartInput {
 }
 
 export const sparepartService = {
-  async getAll(search?: string): Promise<Sparepart[]> {
+  async getAll(search?: string, limit?: number, offset?: number): Promise<Sparepart[]> {
     const db = await getDatabase();
+    let sql = 'SELECT * FROM spareparts';
+    const params: any[] = [];
+    
     if (search && search.trim()) {
       const q = `%${search.trim()}%`;
-      return await db.getAllAsync<Sparepart>(
-        `SELECT * FROM spareparts WHERE name LIKE ? OR category LIKE ? ORDER BY name ASC`,
-        q, q
-      );
+      sql += ' WHERE name LIKE ? OR category LIKE ?';
+      params.push(q, q);
     }
-    return await db.getAllAsync<Sparepart>('SELECT * FROM spareparts ORDER BY name ASC');
+    
+    sql += ' ORDER BY name ASC';
+    
+    if (limit !== undefined) {
+      sql += ' LIMIT ?';
+      params.push(limit);
+      
+      if (offset !== undefined) {
+        sql += ' OFFSET ?';
+        params.push(offset);
+      }
+    }
+    
+    return await db.getAllAsync<Sparepart>(sql, ...params);
   },
 
   async getById(id: string): Promise<Sparepart | null> {

@@ -1,6 +1,6 @@
 import React from 'react';
 import { Pressable, View, ViewStyle } from 'react-native';
-import { theme } from '../../constants/theme';
+import { useTheme } from '../../contexts/ThemeContext';
 
 interface Props {
   children: React.ReactNode;
@@ -23,6 +23,7 @@ export function Card({
   accent = false,
   elevated = true,
 }: Props) {
+  const { theme } = useTheme();
   const pad =
     typeof padding === 'number' ? padding : PADDING_MAP[padding];
 

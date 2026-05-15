@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import React, { useState } from 'react';
 import { Modal, Pressable, ScrollView, Text, View } from 'react-native';
-import { theme } from '../../constants/theme';
+import { useTheme } from '../../contexts/ThemeContext';
 import { receiptService } from '../../services/receiptService';
 import { Transaction } from '../../types';
 import { Button } from './Button';
@@ -16,36 +16,6 @@ interface Props {
   onError?: (msg: string) => void;
 }
 
-const TEMPLATES: {
-  key: TemplateKey;
-  title: string;
-  desc: string;
-  icon: keyof typeof Ionicons.glyphMap;
-  color: string;
-}[] = [
-  {
-    key: 'created',
-    title: 'Servis Diterima',
-    desc: 'Pemberitahuan kendaraan diterima & sedang dikerjakan',
-    icon: 'construct',
-    color: theme.colors.info,
-  },
-  {
-    key: 'ready',
-    title: 'Selesai + Tagihan',
-    desc: 'Servis selesai, kendaraan siap diambil & tagihan',
-    icon: 'cash',
-    color: theme.colors.warning,
-  },
-  {
-    key: 'paid',
-    title: 'Selesai + Lunas',
-    desc: 'Struk lengkap, transaksi sudah dibayar',
-    icon: 'checkmark-circle',
-    color: theme.colors.success,
-  },
-];
-
 export function WhatsAppTemplateModal({
   visible,
   tx,
@@ -53,9 +23,34 @@ export function WhatsAppTemplateModal({
   onSent,
   onError,
 }: Props) {
+  const { theme } = useTheme();
   const [selected, setSelected] = useState<TemplateKey | null>(null);
   const [busy, setBusy] = useState(false);
   const isRetail = tx?.type === 'retail';
+
+  const TEMPLATES = [
+    {
+      key: 'created' as TemplateKey,
+      title: 'Servis Diterima',
+      desc: 'Pemberitahuan kendaraan diterima & sedang dikerjakan',
+      icon: 'construct' as const,
+      color: theme.colors.info,
+    },
+    {
+      key: 'ready' as TemplateKey,
+      title: 'Selesai + Tagihan',
+      desc: 'Servis selesai, kendaraan siap diambil & tagihan',
+      icon: 'cash' as const,
+      color: theme.colors.warning,
+    },
+    {
+      key: 'paid' as TemplateKey,
+      title: 'Selesai + Lunas',
+      desc: 'Struk lengkap, transaksi sudah dibayar',
+      icon: 'checkmark-circle' as const,
+      color: theme.colors.success,
+    },
+  ];
 
   const send = async () => {
     if (!tx || (!isRetail && !selected)) return;
@@ -248,7 +243,12 @@ export function WhatsAppTemplateModal({
           ) : (
             <>
               <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 8 }}>
-                {TEMPLATES.filter((tpl) => tpl.key !== 'paid' || tx?.status === 'paid').map((tpl) => {
+                {TEMPLATES.filter((tpl) => {
+                  if (tx?.status === 'paid') {
+                    return tpl.key === 'paid';
+                  }
+                  return tpl.key !== 'paid';
+                }).map((tpl) => {
                   const active = selected === tpl.key;
                   return (
                     <Pressable

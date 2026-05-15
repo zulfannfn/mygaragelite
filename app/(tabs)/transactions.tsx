@@ -1,14 +1,14 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
 import React, { useCallback, useState } from 'react';
-import { FlatList, Modal, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { FlatList, Modal, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { Badge } from '../../src/components/ui/Badge';
 import { Card } from '../../src/components/ui/Card';
 import { EmptyState } from '../../src/components/ui/EmptyState';
 import { ScreenHeader } from '../../src/components/ui/ScreenHeader';
 import { SearchBar } from '../../src/components/ui/SearchBar';
 import { SkeletonCard } from '../../src/components/ui/Skeleton';
-import { theme } from '../../src/constants/theme';
+import { useTheme } from '../../src/contexts/ThemeContext';
 import { exportService } from '../../src/services/exportService';
 import { useAppStore } from '../../src/store/useAppStore';
 import { useTransactionStore } from '../../src/store/useTransactionStore';
@@ -23,9 +23,9 @@ const STATUS_FILTERS: {
   color?: string;
 }[] = [
   { label: 'Semua', icon: 'apps' },
-  { label: 'Lunas', value: 'paid', icon: 'checkmark-circle', color: theme.colors.success },
-  { label: 'Pending', value: 'pending', icon: 'time', color: theme.colors.warning },
-  { label: 'Batal', value: 'cancelled', icon: 'close-circle', color: theme.colors.danger },
+  { label: 'Lunas', value: 'paid', icon: 'checkmark-circle', color: '#00C896' },
+  { label: 'Pending', value: 'pending', icon: 'time', color: '#FFB800' },
+  { label: 'Batal', value: 'cancelled', icon: 'close-circle', color: '#FF4757' },
 ];
 
 const TYPE_FILTERS: {
@@ -35,8 +35,8 @@ const TYPE_FILTERS: {
   color?: string;
 }[] = [
   { label: 'Semua', icon: 'apps' },
-  { label: 'Servis', value: 'service', icon: 'construct', color: theme.colors.accent },
-  { label: 'Kasir', value: 'retail', icon: 'cart', color: theme.colors.success },
+  { label: 'Servis', value: 'service', icon: 'construct', color: '#FF6B35' },
+  { label: 'Kasir', value: 'retail', icon: 'cart', color: '#00C896' },
 ];
 
 function formatShortDate(ts?: number): string {
@@ -78,7 +78,8 @@ function emptyDateInput(): DateInput {
 export default function TransactionsScreen() {
   const router = useRouter();
   const showToast = useAppStore((s) => s.showToast);
-  const { transactions, loading, filters, setFilters, load } = useTransactionStore();
+  const { theme } = useTheme();
+  const { transactions, loading, hasMore, filters, setFilters, load, loadMore } = useTransactionStore();
   const [filterModalOpen, setFilterModalOpen] = useState(false);
   const [tempType, setTempType] = useState<TransactionType | undefined>(undefined);
   const [tempStatus, setTempStatus] = useState<TransactionStatus | undefined>(undefined);
@@ -90,6 +91,10 @@ export default function TransactionsScreen() {
       load();
     }, [load])
   );
+
+  const handleEndReached = () => {
+    loadMore();
+  };
 
   const totalRevenue = transactions
     .filter((t) => t.status === 'paid')
@@ -110,36 +115,20 @@ export default function TransactionsScreen() {
         title="Transaksi"
         subtitle={`${transactions.length} transaksi • ${formatCompactCurrency(totalRevenue)}`}
         rightElement={
-          <View style={{ flexDirection: 'row', gap: 8 }}>
-            <Pressable
-              onPress={handleExport}
-              style={({ pressed }) => ({
-                width: 44,
-                height: 44,
-                borderRadius: 22,
-                backgroundColor: theme.colors.card,
-                alignItems: 'center',
-                justifyContent: 'center',
-                opacity: pressed ? 0.7 : 1,
-              })}
-            >
-              <Ionicons name="download-outline" size={20} color={theme.colors.text} />
-            </Pressable>
-            <Pressable
-              onPress={() => router.push('/transaction-form')}
-              style={({ pressed }) => ({
-                width: 44,
-                height: 44,
-                borderRadius: 22,
-                backgroundColor: theme.colors.accent,
-                alignItems: 'center',
-                justifyContent: 'center',
-                opacity: pressed ? 0.7 : 1,
-              })}
-            >
-              <Ionicons name="add" size={22} color="#fff" />
-            </Pressable>
-          </View>
+          <Pressable
+            onPress={() => router.push('/transaction-form')}
+            style={({ pressed }) => ({
+              width: 44,
+              height: 44,
+              borderRadius: 22,
+              backgroundColor: theme.colors.accent,
+              alignItems: 'center',
+              justifyContent: 'center',
+              opacity: pressed ? 0.7 : 1,
+            })}
+          >
+            <Ionicons name="add" size={22} color="#fff" />
+          </Pressable>
         }
       />
 
@@ -321,9 +310,16 @@ export default function TransactionsScreen() {
           contentContainerStyle={{
             paddingHorizontal: 16,
             paddingTop: 8,
-            paddingBottom: 100,
+            paddingBottom: 100 + (Platform.OS === 'android' ? 48 : 34),
           }}
           ItemSeparatorComponent={() => <View style={{ height: 12 }} />}
+          onEndReached={handleEndReached}
+          onEndReachedThreshold={0.5}
+          ListFooterComponent={loading && transactions.length > 0 ? () => (
+            <View style={{ padding: 16 }}>
+              <SkeletonCard />
+            </View>
+          ) : undefined}
           ListEmptyComponent={
             <EmptyState
               icon="receipt-outline"
@@ -558,7 +554,7 @@ export default function TransactionsScreen() {
             <View style={{ gap: 10, marginBottom: 16 }}>
               <View>
                 <Text style={{ color: theme.colors.textSecondary, fontSize: 11, marginBottom: 4 }}>Dari</Text>
-                <View style={{ flexDirection: 'row', gap: 8 }}>
+                <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
                   {(['d', 'm', 'y'] as const).map((k) => (
                     <TextInput
                       key={k}
@@ -571,7 +567,8 @@ export default function TransactionsScreen() {
                       maxLength={k === 'y' ? 4 : 2}
                       keyboardType="number-pad"
                       style={{
-                        flex: k === 'y' ? 2 : 1,
+                        flex: 1,
+                        minWidth: k === 'y' ? 80 : 60,
                         height: 42,
                         borderWidth: 1,
                         borderColor: theme.colors.border,
@@ -588,7 +585,7 @@ export default function TransactionsScreen() {
               </View>
               <View>
                 <Text style={{ color: theme.colors.textSecondary, fontSize: 11, marginBottom: 4 }}>Sampai</Text>
-                <View style={{ flexDirection: 'row', gap: 8 }}>
+                <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
                   {(['d', 'm', 'y'] as const).map((k) => (
                     <TextInput
                       key={k}
@@ -601,7 +598,8 @@ export default function TransactionsScreen() {
                       maxLength={k === 'y' ? 4 : 2}
                       keyboardType="number-pad"
                       style={{
-                        flex: k === 'y' ? 2 : 1,
+                        flex: 1,
+                        minWidth: k === 'y' ? 80 : 60,
                         height: 42,
                         borderWidth: 1,
                         borderColor: theme.colors.border,

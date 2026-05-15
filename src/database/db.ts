@@ -28,6 +28,7 @@ export async function resetDatabase(): Promise<void> {
     DROP TABLE IF EXISTS transactions;
     DROP TABLE IF EXISTS spareparts;
     DROP TABLE IF EXISTS customers;
+    DROP TABLE IF EXISTS employees;
     DROP TABLE IF EXISTS settings;
   `);
   await runMigrations(db);
@@ -43,6 +44,7 @@ export async function clearDatabase(): Promise<void> {
     DROP TABLE IF EXISTS transactions;
     DROP TABLE IF EXISTS spareparts;
     DROP TABLE IF EXISTS customers;
+    DROP TABLE IF EXISTS employees;
     DROP TABLE IF EXISTS settings;
   `);
   await runMigrations(db);

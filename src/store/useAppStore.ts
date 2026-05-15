@@ -16,6 +16,10 @@ interface AppState {
   workshopPhone: string;
   setWorkshopInfo: (info: Partial<{ name: string; address: string; phone: string }>) => Promise<void>;
 
+  // Theme
+  isDarkMode: boolean;
+  setDarkMode: (v: boolean) => Promise<void>;
+
   // Toast
   toast: { id: number; message: string; type: 'success' | 'error' | 'info' } | null;
   showToast: (message: string, type?: 'success' | 'error' | 'info') => void;
@@ -55,6 +59,12 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
 
+  isDarkMode: true,
+  setDarkMode: async (v) => {
+    set({ isDarkMode: v });
+    await settingsService.set('dark_mode', v ? 'true' : 'false');
+  },
+
   toast: null,
   showToast: (message, type = 'info') => {
     const id = ++toastId;
@@ -73,6 +83,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       workshopAddress: all.workshop_address ?? '',
       workshopPhone: all.workshop_phone ?? '',
       onboardingDone: all.onboarding_done === 'true',
+      isDarkMode: all.dark_mode !== 'false',
     });
   },
 }));

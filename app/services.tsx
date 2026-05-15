@@ -7,27 +7,46 @@ import { EmptyState } from '../src/components/ui/EmptyState';
 import { ScreenHeader } from '../src/components/ui/ScreenHeader';
 import { SearchBar } from '../src/components/ui/SearchBar';
 import { SkeletonCard } from '../src/components/ui/Skeleton';
-import { theme } from '../src/constants/theme';
+import { useTheme } from '../src/contexts/ThemeContext';
 import { serviceService } from '../src/services/serviceService';
 import { Service } from '../src/types';
 import { formatCurrency } from '../src/utils/currency';
 
 export default function ServicesScreen() {
   const router = useRouter();
+  const { theme } = useTheme();
   const [services, setServices] = useState<Service[]>([]);
   const [loading, setLoading] = useState(true);
+  const [hasMore, setHasMore] = useState(true);
   const [search, setSearch] = useState('');
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    const data = await serviceService.getAll(search);
-    setServices(data);
+  const PAGE_SIZE = 20;
+
+  const load = useCallback(async (offset = 0) => {
+    if (offset === 0) {
+      setLoading(true);
+      setServices([]);
+    }
+    const data = await serviceService.getAll(search, PAGE_SIZE, offset);
+    if (offset === 0) {
+      setServices(data);
+      setHasMore(data.length === PAGE_SIZE);
+    } else {
+      setServices((prev) => [...prev, ...data]);
+      setHasMore(data.length === PAGE_SIZE);
+    }
     setLoading(false);
   }, [search]);
 
+  const handleEndReached = () => {
+    if (!loading && hasMore) {
+      load(services.length);
+    }
+  };
+
   useFocusEffect(
     useCallback(() => {
-      load();
+      load(0);
     }, [load])
   );
 
@@ -60,6 +79,7 @@ export default function ServicesScreen() {
           value={search}
           onChangeText={setSearch}
           placeholder="Cari jasa..."
+          containerStyle={{ marginHorizontal: 0 }}
         />
       </View>
 
@@ -79,6 +99,13 @@ export default function ServicesScreen() {
             paddingBottom: 100,
           }}
           ItemSeparatorComponent={() => <View style={{ height: 12 }} />}
+          onEndReached={handleEndReached}
+          onEndReachedThreshold={0.5}
+          ListFooterComponent={loading && services.length > 0 ? () => (
+            <View style={{ padding: 16 }}>
+              <SkeletonCard />
+            </View>
+          ) : undefined}
           ListEmptyComponent={
             <EmptyState
               icon="construct-outline"

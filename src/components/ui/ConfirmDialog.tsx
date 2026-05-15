@@ -1,6 +1,6 @@
 import React from 'react';
 import { Modal, Text, View } from 'react-native';
-import { theme } from '../../constants/theme';
+import { useTheme } from '../../contexts/ThemeContext';
 import { Button } from './Button';
 
 interface Props {
@@ -24,6 +24,8 @@ export function ConfirmDialog({
   onConfirm,
   onCancel,
 }: Props) {
+  const { theme } = useTheme();
+
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
       <View

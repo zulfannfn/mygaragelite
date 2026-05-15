@@ -6,7 +6,7 @@ import { Badge } from '../src/components/ui/Badge';
 import { Card } from '../src/components/ui/Card';
 import { EmptyState } from '../src/components/ui/EmptyState';
 import { ScreenHeader } from '../src/components/ui/ScreenHeader';
-import { theme } from '../src/constants/theme';
+import { useTheme } from '../src/contexts/ThemeContext';
 import { customerService } from '../src/services/customerService';
 import { transactionService } from '../src/services/transactionService';
 import { Customer, Transaction } from '../src/types';
@@ -16,8 +16,18 @@ import { formatDateTime } from '../src/utils/date';
 export default function CustomerDetail() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
+  const { theme } = useTheme();
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [history, setHistory] = useState<Transaction[]>([]);
+
+  const infoRow = {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 10,
+    paddingVertical: 8,
+    borderTopWidth: 1,
+    borderTopColor: theme.colors.divider,
+  };
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -223,12 +233,3 @@ export default function CustomerDetail() {
     </View>
   );
 }
-
-const infoRow = {
-  flexDirection: 'row' as const,
-  alignItems: 'center' as const,
-  gap: 10,
-  paddingVertical: 8,
-  borderTopWidth: 1,
-  borderTopColor: theme.colors.divider,
-};

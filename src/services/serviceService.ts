@@ -8,16 +8,30 @@ export interface ServiceInput {
 }
 
 export const serviceService = {
-  async getAll(search?: string): Promise<Service[]> {
+  async getAll(search?: string, limit?: number, offset?: number): Promise<Service[]> {
     const db = await getDatabase();
+    let sql = 'SELECT * FROM services';
+    const params: any[] = [];
+    
     if (search?.trim()) {
       const q = `%${search.trim()}%`;
-      return await db.getAllAsync<Service>(
-        'SELECT * FROM services WHERE name LIKE ? ORDER BY name ASC',
-        q
-      );
+      sql += ' WHERE name LIKE ?';
+      params.push(q);
     }
-    return await db.getAllAsync<Service>('SELECT * FROM services ORDER BY name ASC');
+    
+    sql += ' ORDER BY name ASC';
+    
+    if (limit !== undefined) {
+      sql += ' LIMIT ?';
+      params.push(limit);
+      
+      if (offset !== undefined) {
+        sql += ' OFFSET ?';
+        params.push(offset);
+      }
+    }
+    
+    return await db.getAllAsync<Service>(sql, ...params);
   },
 
   async getById(id: string): Promise<Service | null> {

@@ -12,18 +12,30 @@ export interface CustomerInput {
 }
 
 export const customerService = {
-  async getAll(search?: string): Promise<Customer[]> {
+  async getAll(search?: string, limit?: number, offset?: number): Promise<Customer[]> {
     const db = await getDatabase();
+    let sql = 'SELECT * FROM customers';
+    const params: any[] = [];
+    
     if (search && search.trim()) {
       const q = `%${search.trim()}%`;
-      return await db.getAllAsync<Customer>(
-        `SELECT * FROM customers WHERE name LIKE ? OR plate_number LIKE ? OR phone LIKE ? ORDER BY updated_at DESC`,
-        q, q, q
-      );
+      sql += ' WHERE name LIKE ? OR plate_number LIKE ? OR phone LIKE ?';
+      params.push(q, q, q);
     }
-    return await db.getAllAsync<Customer>(
-      'SELECT * FROM customers ORDER BY updated_at DESC'
-    );
+    
+    sql += ' ORDER BY updated_at DESC';
+    
+    if (limit !== undefined) {
+      sql += ' LIMIT ?';
+      params.push(limit);
+      
+      if (offset !== undefined) {
+        sql += ' OFFSET ?';
+        params.push(offset);
+      }
+    }
+    
+    return await db.getAllAsync<Customer>(sql, ...params);
   },
 
   async getById(id: string): Promise<Customer | null> {

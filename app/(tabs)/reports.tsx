@@ -1,19 +1,19 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from 'expo-router';
 import React, { useCallback, useState } from 'react';
-import { Modal, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { Modal, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { Button } from '../../src/components/ui/Button';
 import { Card } from '../../src/components/ui/Card';
 import { ScreenHeader } from '../../src/components/ui/ScreenHeader';
 import { Skeleton } from '../../src/components/ui/Skeleton';
-import { theme } from '../../src/constants/theme';
+import { useTheme } from '../../src/contexts/ThemeContext';
 import { exportService } from '../../src/services/exportService';
 import { reportService } from '../../src/services/reportService';
 import { transactionService } from '../../src/services/transactionService';
 import { useAppStore } from '../../src/store/useAppStore';
 import { PaymentMethodTotal, ReportData, TopMechanic, TopService, TopSparepart } from '../../src/types';
 import { formatCompactCurrency, formatCurrency } from '../../src/utils/currency';
-type SectionKey = 'service' | 'sparepart' | 'mechanic' | 'paymentMethod';
+type SectionKey = 'service' | 'sparepart' | 'mechanic' | 'paymentMethod' | 'category';
 
 interface DateRange {
   start?: number;
@@ -56,7 +56,7 @@ function emptyDateInput(): DateInput {
   return { d: '', m: '', y: '' };
 }
 
-function Chart({ daily, maxDaily }: { daily: ReportData[]; maxDaily: number }) {
+function Chart({ daily, maxDaily, theme }: { daily: ReportData[]; maxDaily: number; theme: any }) {
   const [width, setWidth] = useState(0);
   const chartHeight = 120;
   const paddingX = 16;
@@ -188,12 +188,16 @@ function Chart({ daily, maxDaily }: { daily: ReportData[]; maxDaily: number }) {
 
 export default function ReportsScreen() {
   const showToast = useAppStore((s) => s.showToast);
+  const { theme } = useTheme();
   const [daily, setDaily] = useState<ReportData[]>([]);
   const [monthly, setMonthly] = useState<ReportData[]>([]);
   const [topSp, setTopSp] = useState<TopSparepart[]>([]);
   const [topSvc, setTopSvc] = useState<TopService[]>([]);
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
+  const [topSpLimit, setTopSpLimit] = useState(20);
+  const [topSvcLimit, setTopSvcLimit] = useState(20);
+  const [topMechLimit, setTopMechLimit] = useState(20);
 
   const [topSvcSort, setTopSvcSort] = useState<'sold' | 'revenue'>('sold');
   const [topSpSort, setTopSpSort] = useState<'sold' | 'revenue'>('sold');
@@ -204,12 +208,14 @@ export default function ReportsScreen() {
   const [paymentMethodType, setPaymentMethodType] = useState<'all' | 'service' | 'retail'>('all');
 
   const [topMech, setTopMech] = useState<TopMechanic[]>([]);
+  const [categoryStats, setCategoryStats] = useState<CategoryStats[]>([]);
 
   const [ranges, setRanges] = useState<Record<SectionKey, DateRange>>({
     service: {},
     sparepart: {},
     mechanic: {},
     paymentMethod: {},
+    category: {},
   });
 
   const [tempStart, setTempStart] = useState<DateInput>(emptyDateInput());
@@ -217,22 +223,24 @@ export default function ReportsScreen() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const [d, m, t, s, mech, pm] = await Promise.all([
+    const [d, m, t, s, mech, pm, cat] = await Promise.all([
       reportService.getDailyReport(7),
-      reportService.getMonthlyReport(6),
-      reportService.getTopSpareparts(5, ranges.sparepart.start, ranges.sparepart.end, topSpType),
-      reportService.getTopServices(5, ranges.service.start, ranges.service.end),
-      reportService.getTopMechanics(5, ranges.mechanic.start, ranges.mechanic.end),
+      reportService.getMonthlyReport(12),
+      reportService.getTopServices(topSvcLimit, ranges.service.start, ranges.service.end),
+      reportService.getTopSpareparts(topSpLimit, ranges.sparepart.start, ranges.sparepart.end, topSpType),
+      reportService.getTopMechanics(topMechLimit, ranges.mechanic.start, ranges.mechanic.end),
       reportService.getPaymentMethodTotals(ranges.paymentMethod.start, ranges.paymentMethod.end, paymentMethodType),
+      reportService.getCategoryStats(10, ranges.category.start, ranges.category.end),
     ]);
     setDaily(d);
     setMonthly(m);
-    setTopSp(t);
-    setTopSvc(s);
+    setTopSvc(t);
+    setTopSp(s);
     setTopMech(mech);
     setPaymentMethodData(pm);
+    setCategoryStats(cat);
     setLoading(false);
-  }, [ranges, topSpType, paymentMethodType]);
+  }, [topSvcLimit, topSpLimit, topMechLimit, topSpType, paymentMethodType, ranges]);
 
   useFocusEffect(
     useCallback(() => {
@@ -253,27 +261,15 @@ export default function ReportsScreen() {
   const totalMonthRetailRev = monthData?.retailRevenue ?? 0;
   const maxDaily = Math.max(...daily.map((d) => Math.max(d.serviceRevenue, d.retailRevenue)), 1);
 
-  const exportPDF = async () => {
-    try {
-      setExporting(true);
-      const tx = await transactionService.getAll();
-      await exportService.exportTransactionsToPDF(tx, 'Laporan Lengkap');
-      showToast('Berhasil export PDF', 'success');
-    } catch {
-      showToast('Gagal export', 'error');
-    } finally {
-      setExporting(false);
-    }
-  };
-
   const exportCSV = async () => {
     try {
       setExporting(true);
       const tx = await transactionService.getAll();
       await exportService.exportTransactionsToCSV(tx);
       showToast('Berhasil export CSV', 'success');
-    } catch {
-      showToast('Gagal export', 'error');
+    } catch (e: any) {
+      console.error('Export error:', e);
+      showToast('Gagal export: ' + (e?.message ?? 'Unknown error'), 'error');
     } finally {
       setExporting(false);
     }
@@ -282,7 +278,7 @@ export default function ReportsScreen() {
   return (
     <ScrollView
       style={{ flex: 1, backgroundColor: theme.colors.background }}
-      contentContainerStyle={{ paddingBottom: 100 }}
+      contentContainerStyle={{ paddingBottom: 100 + (Platform.OS === 'android' ? 48 : 34) }}
     >
       <ScreenHeader title="Laporan" subtitle="Statistik & analitik bengkel" />
 
@@ -378,7 +374,7 @@ export default function ReportsScreen() {
               Belum ada data
             </Text>
           ) : (
-            <Chart daily={daily} maxDaily={maxDaily} />
+            <Chart daily={daily} maxDaily={maxDaily} theme={theme} />
           )}
         </Card>
       </View>
@@ -399,40 +395,42 @@ export default function ReportsScreen() {
           {loading ? (
             <Skeleton height={80} />
           ) : (
-            monthly.map((m, i) => (
-              <View
-                key={i}
-                style={{
-                  flexDirection: 'row',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  paddingVertical: 8,
-                  borderBottomWidth: i < monthly.length - 1 ? 1 : 0,
-                  borderBottomColor: theme.colors.divider,
-                }}
-              >
-                <Text style={{ color: theme.colors.text, fontSize: 14 }}>{m.date}</Text>
-                <View style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>
-                  <View style={{ alignItems: 'flex-end' }}>
-                    <Text style={{ color: theme.colors.accent, fontSize: 13, fontWeight: '700' }}>
-                      {formatCurrency(m.serviceRevenue)}
-                    </Text>
-                    <Text style={{ color: theme.colors.textMuted, fontSize: 10 }}>
-                      {m.serviceCount} svc
-                    </Text>
-                  </View>
-                  <View style={{ width: 1, backgroundColor: theme.colors.divider, height: 20 }} />
-                  <View style={{ alignItems: 'flex-end' }}>
-                    <Text style={{ color: theme.colors.success, fontSize: 13, fontWeight: '700' }}>
-                      {formatCurrency(m.retailRevenue)}
-                    </Text>
-                    <Text style={{ color: theme.colors.textMuted, fontSize: 10 }}>
-                      {m.retailCount} ksr
-                    </Text>
+            <ScrollView style={{ maxHeight: 200 }} showsVerticalScrollIndicator={false}>
+              {monthly.map((m, i) => (
+                <View
+                  key={i}
+                  style={{
+                    flexDirection: 'row',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    paddingVertical: 8,
+                    borderBottomWidth: i < monthly.length - 1 ? 1 : 0,
+                    borderBottomColor: theme.colors.divider,
+                  }}
+                >
+                  <Text style={{ color: theme.colors.text, fontSize: 14 }}>{m.date}</Text>
+                  <View style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>
+                    <View style={{ alignItems: 'flex-end' }}>
+                      <Text style={{ color: theme.colors.accent, fontSize: 13, fontWeight: '700' }}>
+                        {formatCurrency(m.serviceRevenue)}
+                      </Text>
+                      <Text style={{ color: theme.colors.textMuted, fontSize: 10 }}>
+                        {m.serviceCount} svc
+                      </Text>
+                    </View>
+                    <View style={{ width: 1, backgroundColor: theme.colors.divider, height: 20 }} />
+                    <View style={{ alignItems: 'flex-end' }}>
+                      <Text style={{ color: theme.colors.success, fontSize: 13, fontWeight: '700' }}>
+                        {formatCurrency(m.retailRevenue)}
+                      </Text>
+                      <Text style={{ color: theme.colors.textMuted, fontSize: 10 }}>
+                        {m.retailCount} ksr
+                      </Text>
+                    </View>
                   </View>
                 </View>
-              </View>
-            ))
+              ))}
+            </ScrollView>
           )}
         </Card>
       </View>
@@ -623,46 +621,48 @@ export default function ReportsScreen() {
               Belum ada data
             </Text>
           ) : (
-            [...topSvc]
-              .sort((a, b) => (topSvcSort === 'sold' ? b.totalSold - a.totalSold : b.revenue - a.revenue))
-              .map((sv, i) => (
-              <View
-                key={sv.name + i}
-                style={{
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  paddingVertical: 8,
-                  gap: 12,
-                  borderBottomWidth: i < topSvc.length - 1 ? 1 : 0,
-                  borderBottomColor: theme.colors.divider,
-                }}
-              >
+            <ScrollView style={{ maxHeight: 250 }} showsVerticalScrollIndicator={false}>
+              {[...topSvc]
+                .sort((a, b) => (topSvcSort === 'sold' ? b.totalSold - a.totalSold : b.revenue - a.revenue))
+                .map((sv, i) => (
                 <View
+                  key={sv.name + i}
                   style={{
-                    width: 28,
-                    height: 28,
-                    borderRadius: 14,
-                    backgroundColor:
-                      i === 0 ? theme.colors.accent : theme.colors.cardLight,
+                    flexDirection: 'row',
                     alignItems: 'center',
-                    justifyContent: 'center',
+                    paddingVertical: 8,
+                    gap: 12,
+                    borderBottomWidth: i < topSvc.length - 1 ? 1 : 0,
+                    borderBottomColor: theme.colors.divider,
                   }}
                 >
-                  <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>{i + 1}</Text>
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={{ color: theme.colors.text, fontSize: 13, fontWeight: '600' }}>
-                    {sv.name}
+                  <View
+                    style={{
+                      width: 28,
+                      height: 28,
+                      borderRadius: 14,
+                      backgroundColor:
+                        i === 0 ? theme.colors.accent : theme.colors.cardLight,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>{i + 1}</Text>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ color: theme.colors.text, fontSize: 13, fontWeight: '600' }}>
+                      {sv.name}
+                    </Text>
+                    <Text style={{ color: theme.colors.textMuted, fontSize: 11 }}>
+                      Terjual: {sv.totalSold}
+                    </Text>
+                  </View>
+                  <Text style={{ color: theme.colors.accent, fontSize: 13, fontWeight: '700' }}>
+                    {formatCompactCurrency(sv.revenue)}
                   </Text>
-                  <Text style={{ color: theme.colors.textMuted, fontSize: 11 }}>
-                    Terjual: {sv.totalSold}
-                  </Text>
                 </View>
-                <Text style={{ color: theme.colors.accent, fontSize: 13, fontWeight: '700' }}>
-                  {formatCompactCurrency(sv.revenue)}
-                </Text>
-              </View>
-            ))
+              ))}
+            </ScrollView>
           )}
         </Card>
       </View>
@@ -756,46 +756,141 @@ export default function ReportsScreen() {
               Belum ada data
             </Text>
           ) : (
-            [...topSp]
-              .sort((a, b) => (topSpSort === 'sold' ? b.totalSold - a.totalSold : b.revenue - a.revenue))
-              .map((sp, i) => (
-              <View
-                key={sp.id ?? i}
-                style={{
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  paddingVertical: 8,
-                  gap: 12,
-                  borderBottomWidth: i < topSp.length - 1 ? 1 : 0,
-                  borderBottomColor: theme.colors.divider,
-                }}
-              >
+            <ScrollView style={{ maxHeight: 250 }} showsVerticalScrollIndicator={false}>
+              {[...topSp]
+                .sort((a, b) => (topSpSort === 'sold' ? b.totalSold - a.totalSold : b.revenue - a.revenue))
+                .map((sp, i) => (
                 <View
+                  key={sp.id ?? i}
                   style={{
-                    width: 28,
-                    height: 28,
-                    borderRadius: 14,
-                    backgroundColor:
-                      i === 0 ? theme.colors.warning : theme.colors.cardLight,
+                    flexDirection: 'row',
                     alignItems: 'center',
-                    justifyContent: 'center',
+                    paddingVertical: 8,
+                    gap: 12,
+                    borderBottomWidth: i < topSp.length - 1 ? 1 : 0,
+                    borderBottomColor: theme.colors.divider,
                   }}
                 >
-                  <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>{i + 1}</Text>
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={{ color: theme.colors.text, fontSize: 13, fontWeight: '600' }}>
-                    {sp.name}
+                  <View
+                    style={{
+                      width: 28,
+                      height: 28,
+                      borderRadius: 14,
+                      backgroundColor:
+                        i === 0 ? theme.colors.warning : theme.colors.cardLight,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>{i + 1}</Text>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ color: theme.colors.text, fontSize: 13, fontWeight: '600' }}>
+                      {sp.name}
+                    </Text>
+                    <Text style={{ color: theme.colors.textMuted, fontSize: 11 }}>
+                      Terjual: {sp.totalSold}
+                    </Text>
+                  </View>
+                  <Text style={{ color: theme.colors.accent, fontSize: 13, fontWeight: '700' }}>
+                    {formatCompactCurrency(sp.revenue)}
                   </Text>
-                  <Text style={{ color: theme.colors.textMuted, fontSize: 11 }}>
-                    Terjual: {sp.totalSold}
+                </View>
+              ))}
+            </ScrollView>
+          )}
+        </Card>
+      </View>
+
+      {/* Category Stats */}
+      <View style={{ paddingHorizontal: 16, marginBottom: 12 }}>
+        <Card>
+          <View
+            style={{
+              flexDirection: 'row',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginBottom: 12,
+            }}
+          >
+            <Text
+              style={{
+                color: theme.colors.text,
+                fontSize: 15,
+                fontWeight: '700',
+              }}
+            >
+              📦 Pendapatan per Kategori
+            </Text>
+            <Pressable
+              onPress={() => {
+                setTempStart(formatDateInput(ranges.category.start));
+                setTempEnd(formatDateInput(ranges.category.end));
+                setSortModal('category');
+              }}
+              hitSlop={8}
+              style={({ pressed }) => ({
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 4,
+                paddingHorizontal: 8,
+                paddingVertical: 4,
+                borderRadius: theme.radius.md,
+                backgroundColor: theme.colors.cardLight,
+                opacity: pressed ? 0.7 : 1,
+              })}
+            >
+              <Ionicons name="funnel" size={12} color={theme.colors.textSecondary} />
+              <Text style={{ color: theme.colors.textSecondary, fontSize: 11 }}>
+                Transaksi
+                {' · '}
+                {ranges.category.start || ranges.category.end
+                  ? `${formatShortDate(ranges.category.start)} - ${formatShortDate(ranges.category.end)}`
+                  : 'Semua'}
+              </Text>
+            </Pressable>
+          </View>
+          {loading ? (
+            <Skeleton height={150} />
+          ) : categoryStats.length === 0 ? (
+            <Text style={{ color: theme.colors.textMuted, textAlign: 'center', paddingVertical: 20 }}>
+              Belum ada data
+            </Text>
+          ) : (
+            <ScrollView style={{ maxHeight: 200 }} showsVerticalScrollIndicator={false}>
+              {categoryStats.map((cat, i) => (
+                <View
+                  key={i}
+                  style={{
+                    flexDirection: 'row',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    paddingVertical: 10,
+                    borderBottomWidth: i < categoryStats.length - 1 ? 1 : 0,
+                    borderBottomColor: theme.colors.divider,
+                  }}
+                >
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ color: theme.colors.text, fontSize: 14, fontWeight: '600' }}>
+                      {cat.category}
+                    </Text>
+                    <Text style={{ color: theme.colors.textMuted, fontSize: 11, marginTop: 2 }}>
+                      {cat.itemsSold} item terjual
+                    </Text>
+                  </View>
+                  <Text
+                    style={{
+                      color: theme.colors.accent,
+                      fontSize: 15,
+                      fontWeight: '700',
+                      marginLeft: 12,
+                    }}
+                  >
+                    {formatCompactCurrency(cat.totalRevenue)}
                   </Text>
                 </View>
-                <Text style={{ color: theme.colors.accent, fontSize: 13, fontWeight: '700' }}>
-                  {formatCompactCurrency(sp.revenue)}
-                </Text>
-              </View>
-            ))
+              ))}
+            </ScrollView>
           )}
         </Card>
       </View>
@@ -855,44 +950,46 @@ export default function ReportsScreen() {
               Belum ada data
             </Text>
           ) : (
-            topMech.map((mech, i) => (
-              <View
-                key={mech.id ?? i}
-                style={{
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  paddingVertical: 8,
-                  gap: 12,
-                  borderBottomWidth: i < topMech.length - 1 ? 1 : 0,
-                  borderBottomColor: theme.colors.divider,
-                }}
-              >
+            <ScrollView style={{ maxHeight: 250 }} showsVerticalScrollIndicator={false}>
+              {topMech.map((mech, i) => (
                 <View
+                  key={mech.id ?? i}
                   style={{
-                    width: 28,
-                    height: 28,
-                    borderRadius: 14,
-                    backgroundColor:
-                      i === 0 ? theme.colors.success : theme.colors.cardLight,
+                    flexDirection: 'row',
                     alignItems: 'center',
-                    justifyContent: 'center',
+                    paddingVertical: 8,
+                    gap: 12,
+                    borderBottomWidth: i < topMech.length - 1 ? 1 : 0,
+                    borderBottomColor: theme.colors.divider,
                   }}
                 >
-                  <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>{i + 1}</Text>
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={{ color: theme.colors.text, fontSize: 13, fontWeight: '600' }}>
-                    {mech.name}
+                  <View
+                    style={{
+                      width: 28,
+                      height: 28,
+                      borderRadius: 14,
+                      backgroundColor:
+                        i === 0 ? theme.colors.success : theme.colors.cardLight,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>{i + 1}</Text>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ color: theme.colors.text, fontSize: 13, fontWeight: '600' }}>
+                      {mech.name}
+                    </Text>
+                    <Text style={{ color: theme.colors.textMuted, fontSize: 11 }}>
+                      {mech.transactionCount} transaksi
+                    </Text>
+                  </View>
+                  <Text style={{ color: theme.colors.accent, fontSize: 13, fontWeight: '700' }}>
+                    {formatCompactCurrency(mech.revenue)}
                   </Text>
-                  <Text style={{ color: theme.colors.textMuted, fontSize: 11 }}>
-                    {mech.transactionCount} transaksi
-                  </Text>
                 </View>
-                <Text style={{ color: theme.colors.accent, fontSize: 13, fontWeight: '700' }}>
-                  {formatCompactCurrency(mech.revenue)}
-                </Text>
-              </View>
-            ))
+              ))}
+            </ScrollView>
           )}
         </Card>
       </View>
@@ -1013,7 +1110,7 @@ export default function ReportsScreen() {
                 <Text style={{ color: theme.colors.textSecondary, fontSize: 12, marginBottom: 6 }}>
                   Dari
                 </Text>
-                <View style={{ flexDirection: 'row', gap: 8 }}>
+                <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
                   {(['d', 'm', 'y'] as const).map((k) => (
                     <TextInput
                       key={k}
@@ -1026,7 +1123,8 @@ export default function ReportsScreen() {
                       maxLength={k === 'y' ? 4 : 2}
                       keyboardType="number-pad"
                       style={{
-                        flex: k === 'y' ? 2 : 1,
+                        flex: 1,
+                        minWidth: k === 'y' ? 80 : 60,
                         height: 42,
                         borderWidth: 1,
                         borderColor: theme.colors.border,
@@ -1045,7 +1143,7 @@ export default function ReportsScreen() {
                 <Text style={{ color: theme.colors.textSecondary, fontSize: 12, marginBottom: 6 }}>
                   Sampai
                 </Text>
-                <View style={{ flexDirection: 'row', gap: 8 }}>
+                <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
                   {(['d', 'm', 'y'] as const).map((k) => (
                     <TextInput
                       key={k}
@@ -1058,7 +1156,8 @@ export default function ReportsScreen() {
                       maxLength={k === 'y' ? 4 : 2}
                       keyboardType="number-pad"
                       style={{
-                        flex: k === 'y' ? 2 : 1,
+                        flex: 1,
+                        minWidth: k === 'y' ? 80 : 60,
                         height: 42,
                         borderWidth: 1,
                         borderColor: theme.colors.border,
@@ -1125,13 +1224,6 @@ export default function ReportsScreen() {
 
       {/* Export */}
       <View style={{ paddingHorizontal: 16, marginTop: 8, gap: 10 }}>
-        <Button
-          title="Export PDF"
-          onPress={exportPDF}
-          loading={exporting}
-          icon={<Ionicons name="document-text" size={18} color="#fff" />}
-          fullWidth
-        />
         <Button
           title="Export CSV / Excel"
           variant="secondary"

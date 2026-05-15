@@ -1,13 +1,13 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import React, { useState } from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { Platform, Pressable, ScrollView, Text, View } from 'react-native';
 import { Button } from '../src/components/ui/Button';
 import { Card } from '../src/components/ui/Card';
 import { ConfirmDialog } from '../src/components/ui/ConfirmDialog';
 import { Input } from '../src/components/ui/Input';
 import { ScreenHeader } from '../src/components/ui/ScreenHeader';
-import { theme } from '../src/constants/theme';
+import { useTheme } from '../src/contexts/ThemeContext';
 import { clearDatabase, resetDatabase } from '../src/database/db';
 import { backupService } from '../src/services/backupService';
 import { useAppStore } from '../src/store/useAppStore';
@@ -18,16 +18,25 @@ export default function SettingsScreen() {
     workshopName,
     workshopAddress,
     workshopPhone,
+    isDarkMode,
     setWorkshopInfo,
+    setDarkMode,
     showToast,
     loadSettings,
   } = useAppStore();
+  const { theme } = useTheme();
   const [name, setName] = useState(workshopName);
   const [address, setAddress] = useState(workshopAddress);
   const [phone, setPhone] = useState(workshopPhone);
   const [confirmReset, setConfirmReset] = useState(false);
   const [confirmClear, setConfirmClear] = useState(false);
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    setName(workshopName);
+    setAddress(workshopAddress);
+    setPhone(workshopPhone);
+  }, [workshopName, workshopAddress, workshopPhone]);
 
   const saveInfo = async () => {
     await setWorkshopInfo({ name: name.trim(), address: address.trim(), phone: phone.trim() });
@@ -80,8 +89,8 @@ export default function SettingsScreen() {
   return (
     <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
       <ScreenHeader title="Pengaturan" showBack />
-      <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 40 }}>
-        <Text style={section}>BENGKEL</Text>
+      <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 40 + (Platform.OS === 'android' ? 48 : 34) }}>
+        <Text style={{ ...sectionBase, color: theme.colors.textSecondary }}>BENGKEL</Text>
         <Card style={{ marginBottom: 16 }}>
           <Input label="Nama Bengkel" value={name} onChangeText={setName} />
           <Input label="Alamat" value={address} onChangeText={setAddress} />
@@ -94,7 +103,7 @@ export default function SettingsScreen() {
           <Button title="Simpan" onPress={saveInfo} fullWidth />
         </Card>
 
-        <Text style={section}>MANAJEMEN</Text>
+        <Text style={{ ...sectionBase, color: theme.colors.textSecondary }}>MANAJEMEN</Text>
         <Card style={{ marginBottom: 16 }} padding="sm">
           <Pressable
             onPress={() => router.push('/employees')}
@@ -131,32 +140,52 @@ export default function SettingsScreen() {
           </Pressable>
         </Card>
 
-        <Text style={section}>TAMPILAN</Text>
+        <Text style={{ ...sectionBase, color: theme.colors.textSecondary }}>TAMPILAN</Text>
         <Card style={{ marginBottom: 16 }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-            <Ionicons name="moon" size={20} color={theme.colors.accent} />
+          <Pressable
+            onPress={() => setDarkMode(!isDarkMode)}
+            style={({ pressed }) => ({
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 12,
+              padding: 12,
+              borderRadius: theme.radius.md,
+              opacity: pressed ? 0.7 : 1,
+            })}
+          >
+            <Ionicons name={isDarkMode ? 'moon' : 'sunny'} size={20} color={theme.colors.accent} />
             <View style={{ flex: 1 }}>
-              <Text style={{ color: theme.colors.text, fontWeight: '600' }}>Dark Mode</Text>
+              <Text style={{ color: theme.colors.text, fontWeight: '600' }}>
+                {isDarkMode ? 'Dark Mode' : 'Light Mode'}
+              </Text>
               <Text style={{ color: theme.colors.textMuted, fontSize: 12 }}>
-                Aplikasi selalu menggunakan tema gelap modern
+                {isDarkMode ? 'Tema gelap modern' : 'Tema terang'}
               </Text>
             </View>
             <View
               style={{
-                paddingHorizontal: 10,
-                paddingVertical: 4,
-                backgroundColor: theme.colors.success + '30',
-                borderRadius: 12,
+                width: 44,
+                height: 26,
+                borderRadius: 13,
+                backgroundColor: isDarkMode ? theme.colors.success : theme.colors.border,
+                padding: 3,
+                alignItems: isDarkMode ? 'flex-end' : 'flex-start',
+                justifyContent: 'center',
               }}
             >
-              <Text style={{ color: theme.colors.success, fontSize: 11, fontWeight: '700' }}>
-                AKTIF
-              </Text>
+              <View
+                style={{
+                  width: 20,
+                  height: 20,
+                  borderRadius: 10,
+                  backgroundColor: '#fff',
+                }}
+              />
             </View>
-          </View>
+          </Pressable>
         </Card>
 
-        <Text style={section}>DATA</Text>
+        <Text style={{ ...sectionBase, color: theme.colors.textSecondary }}>DATA</Text>
         <Card style={{ marginBottom: 12 }}>
           <Button
             title="Backup Database"
@@ -197,7 +226,7 @@ export default function SettingsScreen() {
           />
         </Card>
 
-        <Text style={section}>TENTANG</Text>
+        <Text style={{ ...sectionBase, color: theme.colors.textSecondary }}>TENTANG</Text>
         <Card>
           <Text style={{ color: theme.colors.text, fontWeight: '700', fontSize: 16 }}>
             MyGarage Lite
@@ -234,8 +263,7 @@ export default function SettingsScreen() {
   );
 }
 
-const section = {
-  color: theme.colors.textSecondary,
+const sectionBase = {
   fontSize: 11,
   fontWeight: '700' as const,
   letterSpacing: 1,

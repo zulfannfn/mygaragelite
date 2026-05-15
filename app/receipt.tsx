@@ -9,11 +9,14 @@ import { Transaction } from '../src/types';
 import { formatCurrency } from '../src/utils/currency';
 import { formatDateTime } from '../src/utils/date';
 
+type ReceiptType = 'tagihan' | 'diterima';
+
 export default function ReceiptPage() {
   const router = useRouter();
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, type } = useLocalSearchParams<{ id: string; type?: string }>();
   const [tx, setTx] = useState<Transaction | null>(null);
   const [shop, setShop] = useState({ name: '', address: '', phone: '' });
+  const receiptType = (type as ReceiptType) || 'tagihan';
 
   useEffect(() => {
     if (!id) return;
@@ -212,30 +215,31 @@ export default function ReceiptPage() {
           <View style={dashedLine} />
 
           {/* Totals */}
-          <View style={{ marginVertical: 10 }}>
-            {isPaid && !isRetail && tx.service_items && tx.service_items.length > 0 ? (
-              <TotalRow label="Subtotal Jasa" value={formatCurrency(tx.total_service)} />
-            ) : null}
-            {isPaid && tx.spareparts && tx.spareparts.length > 0 ? (
-              <TotalRow label="Subtotal Sparepart" value={formatCurrency(tx.total_sparepart)} />
-            ) : null}
-            <TotalRow label="TOTAL" value={formatCurrency(tx.total_amount)} bold large />
-            {isPaid && tx.payment_method ? (
-              <TotalRow label={`Bayar (${tx.payment_method})`} value={formatCurrency(isRetail && tx.payment_method === 'Tunai' ? tx.paid_amount : tx.total_amount)} />
-            ) : null}
-            {isPaid && isRetail && tx.payment_method === 'Tunai' ? (
-              <TotalRow label="Kembali" value={formatCurrency(tx.change_amount)} />
-            ) : null}
-          </View>
+          {receiptType === 'tagihan' && (
+            <View style={{ marginVertical: 10 }}>
+              {isPaid && !isRetail && tx.service_items && tx.service_items.length > 0 ? (
+                <TotalRow label="Subtotal Jasa" value={formatCurrency(tx.total_service)} />
+              ) : null}
+              {isPaid && tx.spareparts && tx.spareparts.length > 0 ? (
+                <TotalRow label="Subtotal Sparepart" value={formatCurrency(tx.total_sparepart)} />
+              ) : null}
+              <TotalRow label="TOTAL" value={formatCurrency(tx.total_amount)} bold large />
+              {isPaid && tx.payment_method ? (
+                <TotalRow label={`Bayar (${tx.payment_method})`} value={formatCurrency(isRetail && tx.payment_method === 'Tunai' ? tx.paid_amount : tx.total_amount)} />
+              ) : null}
+              {isPaid && isRetail && tx.payment_method === 'Tunai' ? (
+                <TotalRow label="Kembali" value={formatCurrency(tx.change_amount)} />
+              ) : null}
+            </View>
+          )}
 
           {/* Dashed line */}
-          <View style={dashedLine} />
 
           {/* Status */}
           <View style={{ alignItems: 'center', marginVertical: 10 }}>
             <View
               style={{
-                backgroundColor: isPaid ? '#00C89622' : '#FFB80022',
+                backgroundColor: receiptType === 'diterima' ? theme.colors.accent + '22' : (isPaid ? '#00C89622' : '#FFB80022'),
                 paddingHorizontal: 14,
                 paddingVertical: 6,
                 borderRadius: 6,
@@ -245,11 +249,11 @@ export default function ReceiptPage() {
                 style={{
                   fontSize: 14,
                   fontWeight: '800',
-                  color: isPaid ? '#00865f' : '#a07700',
+                  color: receiptType === 'diterima' ? theme.colors.accent : (isPaid ? '#00865f' : '#a07700'),
                   letterSpacing: 1,
                 }}
               >
-                {isPaid ? (isRetail ? 'LUNAS - KASIR' : 'LUNAS') : 'BELUM LUNAS'}
+                {receiptType === 'diterima' ? 'SERVICE DITERIMA' : (isPaid ? (isRetail ? 'LUNAS - KASIR' : 'LUNAS') : 'BELUM LUNAS')}
               </Text>
             </View>
           </View>
@@ -257,25 +261,30 @@ export default function ReceiptPage() {
           {/* Dashed line */}
           <View style={dashedLine} />
 
-          {/* Mechanic Notes */}
-          {isPaid && tx.mechanic_notes && tx.mechanic_notes.trim() ? (
-            <View style={{ marginVertical: 10 }}>
-              <Text style={sectionTitle}>CATATAN MEKANIK</Text>
-              <Text style={{ fontSize: 12, color: '#555', lineHeight: 17, marginTop: 3 }}>
-                {tx.mechanic_notes}
-              </Text>
-            </View>
-          ) : null}
+          {/* Mechanic Notes & Recommendation - only for tagihan */}
+          {receiptType === 'tagihan' && (
+            <>
+              {/* Mechanic Notes */}
+              {isPaid && tx.mechanic_notes && tx.mechanic_notes.trim() ? (
+                <View style={{ marginVertical: 10 }}>
+                  <Text style={sectionTitle}>CATATAN MEKANIK</Text>
+                  <Text style={{ fontSize: 12, color: '#555', lineHeight: 17, marginTop: 3 }}>
+                    {tx.mechanic_notes}
+                  </Text>
+                </View>
+              ) : null}
 
-          {/* Recommendation */}
-          {isPaid && tx.recommendation && tx.recommendation.trim() ? (
-            <View style={{ marginVertical: 10 }}>
-              <Text style={sectionTitle}>REKOMENDASI BERIKUTNYA</Text>
-              <Text style={{ fontSize: 12, color: '#555', lineHeight: 17, marginTop: 3 }}>
-                {tx.recommendation}
-              </Text>
-            </View>
-          ) : null}
+              {/* Recommendation */}
+              {isPaid && tx.recommendation && tx.recommendation.trim() ? (
+                <View style={{ marginVertical: 10 }}>
+                  <Text style={sectionTitle}>REKOMENDASI BERIKUTNYA</Text>
+                  <Text style={{ fontSize: 12, color: '#555', lineHeight: 17, marginTop: 3 }}>
+                    {tx.recommendation}
+                  </Text>
+                </View>
+              ) : null}
+            </>
+          )}
 
           {/* Footer */}
           <View style={{ alignItems: 'center', marginTop: 14 }}>

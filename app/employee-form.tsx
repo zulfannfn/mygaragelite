@@ -7,7 +7,7 @@ import { ConfirmDialog } from '../src/components/ui/ConfirmDialog';
 import { Input } from '../src/components/ui/Input';
 import { Picker } from '../src/components/ui/Picker';
 import { ScreenHeader } from '../src/components/ui/ScreenHeader';
-import { theme } from '../src/constants/theme';
+import { useTheme } from '../src/contexts/ThemeContext';
 import { employeeService } from '../src/services/employeeService';
 import { useAppStore } from '../src/store/useAppStore';
 import { useEmployeeStore } from '../src/store/useEmployeeStore';
@@ -21,6 +21,7 @@ export default function EmployeeForm() {
   const { id } = useLocalSearchParams<{ id?: string }>();
   const isEdit = !!id;
   const showToast = useAppStore((s) => s.showToast);
+  const { theme } = useTheme();
   const { add, update, remove } = useEmployeeStore();
 
   const [name, setName] = useState('');
@@ -106,6 +107,11 @@ export default function EmployeeForm() {
             value={role}
             options={ROLES}
             onChange={(v) => setRole(v as EmployeeRole)}
+            optionIcons={{
+              Mekanik: 'construct',
+              Kasir: 'cash',
+              Admin: 'shield-checkmark',
+            }}
           />
           <Input
             label="Nomor HP"

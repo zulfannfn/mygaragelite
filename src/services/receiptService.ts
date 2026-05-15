@@ -57,6 +57,7 @@ export const receiptService = {
       `Pelanggan: ${tx.customer_name ?? '-'}${tx.customer_plate ? ` (${tx.customer_plate})` : ''}`
     );
     if (tx.mechanic_name && tx.type !== 'retail') lines.push(`Mekanik  : ${tx.mechanic_name}`);
+    if (tx.cashier_name) lines.push(`Kasir    : ${tx.cashier_name}`);
     lines.push(sep);
 
     if (tx.complaint && tx.complaint.trim() && tx.type !== 'retail') {
@@ -165,6 +166,7 @@ export const receiptService = {
           <div><b>Tanggal:</b> ${formatDateTime(tx.created_at)}</div>
           <div><b>Pelanggan:</b> ${escapeHtml(tx.customer_name ?? '-')}${tx.customer_plate ? ` (${escapeHtml(tx.customer_plate)})` : ''}</div>
           ${tx.mechanic_name && tx.type !== 'retail' ? `<div><b>Mekanik:</b> ${escapeHtml(tx.mechanic_name)}</div>` : ''}
+          ${tx.cashier_name ? `<div><b>Kasir:</b> ${escapeHtml(tx.cashier_name)}</div>` : ''}
           <div style="margin-top:6px">
             <span class="status ${tx.status}">${statusLabel(tx.status)}${tx.type === 'retail' ? ' - KASIR' : ''}</span>
             ${tx.payment_method ? `<span style="margin-left:6px;font-size:12px;color:#555">${escapeHtml(tx.payment_method)}</span>` : ''}
@@ -262,6 +264,7 @@ export const receiptService = {
           <div><b>Tanggal:</b> ${formatDateTime(tx.created_at)}</div>
           <div><b>Pelanggan:</b> ${escapeHtml(tx.customer_name ?? '-')}${tx.customer_plate ? ` (${escapeHtml(tx.customer_plate)})` : ''}</div>
           ${tx.mechanic_name ? `<div><b>Mekanik:</b> ${escapeHtml(tx.mechanic_name)}</div>` : ''}
+          ${tx.cashier_name ? `<div><b>Kasir:</b> ${escapeHtml(tx.cashier_name)}</div>` : ''}
         </div>
 
         ${
@@ -313,6 +316,10 @@ export const receiptService = {
       lines.push('');
       lines.push(`Mekanik: *${tx.mechanic_name}*`);
     }
+    if (tx.cashier_name) {
+      lines.push('');
+      lines.push(`Kasir: *${tx.cashier_name}*`);
+    }
     lines.push('');
     lines.push(`No. Servis: *${shortId(tx.id)}*`);
     lines.push('');
@@ -350,6 +357,14 @@ export const receiptService = {
     lines.push('');
     lines.push(`*TOTAL TAGIHAN: ${formatCurrency(tx.total_amount)}*`);
     lines.push('Mohon untuk segera melakukan pembayaran saat pengambilan. 🙏');
+    if (tx.mechanic_name) {
+      lines.push('');
+      lines.push(`Mekanik: *${tx.mechanic_name}*`);
+    }
+    if (tx.cashier_name) {
+      lines.push('');
+      lines.push(`Kasir: *${tx.cashier_name}*`);
+    }
     if (tx.recommendation && tx.recommendation.trim()) {
       lines.push('');
       lines.push(`💡 Rekomendasi: _${tx.recommendation.trim()}_`);

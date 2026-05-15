@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import React, { useState } from 'react';
 import { FlatList, Modal, Pressable, Text, View } from 'react-native';
-import { theme } from '../../constants/theme';
+import { useTheme } from '../../contexts/ThemeContext';
 import { Card } from './Card';
 
 interface Props<T extends string> {
@@ -28,6 +28,7 @@ export function Picker<T extends string>({
   optionIcons,
   optionColors,
 }: Props<T>) {
+  const { theme } = useTheme();
   const [open, setOpen] = useState(false);
 
   const displayLabel = (v: string) => optionLabels?.[v] ?? v;
@@ -41,7 +42,7 @@ export function Picker<T extends string>({
           style={{
             color: theme.colors.textSecondary,
             fontSize: 13,
-            marginBottom: 2,
+            marginBottom: 8,
             fontWeight: '600',
           }}
         >
@@ -56,13 +57,14 @@ export function Picker<T extends string>({
           borderWidth: 1,
           borderColor: theme.colors.border,
           paddingHorizontal: 12,
-          minHeight: 48,
+          paddingVertical: 8,
+          minHeight: 40,
           width: '100%',
           opacity: pressed ? 0.85 : 1,
         })}
       >
-        <View style={{ flexDirection: 'row', alignItems: 'center', height: '100%' }}>
-          <View style={{ width: 36, alignItems: 'center', justifyContent: 'center', marginRight: 8 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <View style={{ width: 36, alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
             {valueIcon ? (
               <View
                 style={{
@@ -80,7 +82,20 @@ export function Picker<T extends string>({
                   color={valueColor ?? theme.colors.accent}
                 />
               </View>
-            ) : null}
+            ) : (
+              <View
+                style={{
+                  width: 32,
+                  height: 32,
+                  borderRadius: 16,
+                  backgroundColor: theme.colors.borderLight,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <Ionicons name="person" size={16} color={theme.colors.textSecondary} />
+              </View>
+            )}
           </View>
           <Text
             style={{
@@ -88,7 +103,7 @@ export function Picker<T extends string>({
               fontSize: 15,
               fontWeight: value ? '600' : '400',
               flex: 1,
-              marginRight: 8,
+              marginRight: 12,
             }}
             numberOfLines={1}
           >
@@ -119,7 +134,7 @@ export function Picker<T extends string>({
               borderTopLeftRadius: theme.radius.xl,
               borderTopRightRadius: theme.radius.xl,
               paddingTop: 8,
-              paddingBottom: 24,
+              paddingBottom: 16,
               maxHeight: '80%',
             }}
           >

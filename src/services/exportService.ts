@@ -66,16 +66,27 @@ export const exportService = {
   },
 
   async exportTransactionsToCSV(transactions: Transaction[]): Promise<void> {
-    const header = 'No,Tanggal,Pelanggan,Plat,Status,Pembayaran,Jasa,Sparepart,Total\n';
+    const header = 'No,ID,Tanggal,Pelanggan ID,Pelanggan,Plat Nomor,Telepon,Mekanik ID,Mekanik,Keluhan,Rekomendasi,Catatan Mekanik,Tipe,Status,Metode Pembayaran,Dibayar,Kembalian,Total Jasa,Total Sparepart,Total\n';
     const rows = transactions
       .map((t, idx) =>
         [
           idx + 1,
+          t.id,
           formatDateTime(t.created_at),
+          t.customer_id ?? '-',
           (t.customer_name ?? '-').replace(/,/g, ' '),
           t.customer_plate ?? '-',
+          t.customer_phone ?? '-',
+          t.mechanic_id ?? '-',
+          (t.mechanic_name ?? '-').replace(/,/g, ' '),
+          (t.complaint ?? '-').replace(/,/g, ' '),
+          (t.recommendation ?? '-').replace(/,/g, ' '),
+          (t.mechanic_notes ?? '-').replace(/,/g, ' '),
+          t.type,
           t.status,
-          t.payment_method ?? '-',
+          (t.payment_method ?? '-').replace(/,/g, ' '),
+          t.paid_amount,
+          t.change_amount,
           t.total_service,
           t.total_sparepart,
           t.total_amount,

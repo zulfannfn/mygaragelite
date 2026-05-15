@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
-import React, { useEffect, useMemo, useState } from 'react';
-import { Modal, Pressable, ScrollView, Text, View } from 'react-native';
-import { theme } from '../../constants/theme';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { FlatList, Modal, Pressable, Text, View } from 'react-native';
+import { useTheme } from '../../contexts/ThemeContext';
 import { serviceService } from '../../services/serviceService';
 import { formatCurrency, parseCurrency } from '../../utils/currency';
 import { Button } from './Button';
@@ -13,22 +13,50 @@ interface Props {
   onAdd: (service: { service_name: string; price: number }) => void;
 }
 
+const PAGE_SIZE = 20;
+
 export function AddServiceSheet({ visible, onClose, onAdd }: Props) {
+  const { theme } = useTheme();
   const [customName, setCustomName] = useState('');
   const [customPrice, setCustomPrice] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [services, setServices] = useState<{ name: string; price: number }[]>([]);
   const [loading, setLoading] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+  const [showCustomForm, setShowCustomForm] = useState(false);
+
+  const loadServices = useCallback(async (offset = 0) => {
+    if (offset === 0) {
+      setLoading(true);
+      setServices([]);
+    }
+    try {
+      const data = await serviceService.getAll(searchQuery, PAGE_SIZE, offset);
+      if (offset === 0) {
+        setServices(data.map((s) => ({ name: s.name, price: s.price })));
+        setHasMore(data.length === PAGE_SIZE);
+      } else {
+        setServices((prev) => [...prev, ...data.map((s) => ({ name: s.name, price: s.price }))]);
+        setHasMore(data.length === PAGE_SIZE);
+      }
+    } catch (error) {
+      console.error('Error loading services:', error);
+    } finally {
+      setLoading(false);
+    }
+  }, [searchQuery]);
 
   useEffect(() => {
     if (visible) {
-      setLoading(true);
-      serviceService.getAll().then((data) => {
-        setServices(data.map((s) => ({ name: s.name, price: s.price })));
-        setLoading(false);
-      }).catch(() => setLoading(false));
+      loadServices(0);
     }
-  }, [visible]);
+  }, [visible, loadServices]);
+
+  const handleEndReached = () => {
+    if (!loading && hasMore) {
+      loadServices(services.length);
+    }
+  };
 
   const filteredServices = useMemo(() => {
     if (!searchQuery.trim()) return services;
@@ -40,6 +68,7 @@ export function AddServiceSheet({ visible, onClose, onAdd }: Props) {
     setCustomName('');
     setCustomPrice('');
     setSearchQuery('');
+    setShowCustomForm(false);
   };
 
   const close = () => {
@@ -60,6 +89,10 @@ export function AddServiceSheet({ visible, onClose, onAdd }: Props) {
       price,
     });
     reset();
+  };
+
+  const toggleCustomForm = () => {
+    setShowCustomForm(!showCustomForm);
   };
 
   return (
@@ -109,13 +142,69 @@ export function AddServiceSheet({ visible, onClose, onAdd }: Props) {
             </Text>
           </View>
 
-          <ScrollView contentContainerStyle={{ paddingHorizontal: 16 }}>
-            <Input
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-              placeholder="Cari jasa..."
-              leftIcon={<Ionicons name="search" size={18} color={theme.colors.textSecondary} />}
-            />
+          <View style={{ paddingHorizontal: 16 }}>
+            <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+              <View style={{ flex: 1 }}>
+                <Input
+                  value={searchQuery}
+                  onChangeText={setSearchQuery}
+                  placeholder="Cari jasa..."
+                  leftIcon={<Ionicons name="search" size={18} color={theme.colors.textSecondary} />}
+                />
+              </View>
+              <Pressable
+                onPress={toggleCustomForm}
+                style={({ pressed }) => ({
+                  width: 48,
+                  height: 48,
+                  borderRadius: theme.radius.md,
+                  backgroundColor: showCustomForm ? theme.colors.accent : theme.colors.card,
+                  borderWidth: 1,
+                  borderColor: showCustomForm ? theme.colors.accent : theme.colors.border,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  opacity: pressed ? 0.7 : 1,
+                })}
+              >
+                <Ionicons
+                  name="add"
+                  size={20}
+                  color={showCustomForm ? '#fff' : theme.colors.textSecondary}
+                />
+              </Pressable>
+            </View>
+
+            {showCustomForm && (
+              <View
+                style={{
+                  padding: 14,
+                  backgroundColor: theme.colors.card,
+                  borderRadius: theme.radius.lg,
+                  borderWidth: 1,
+                  borderColor: theme.colors.border,
+                  marginTop: 12,
+                }}
+              >
+                <Input
+                  value={customName}
+                  onChangeText={setCustomName}
+                  placeholder="Nama jasa..."
+                />
+                <Input
+                  value={customPrice}
+                  onChangeText={setCustomPrice}
+                  placeholder="Harga (Rp)"
+                  keyboardType="numeric"
+                />
+                <Button
+                  title="Tambahkan Jasa Kustom"
+                  fullWidth
+                  onPress={submitCustom}
+                  disabled={!customName.trim()}
+                  icon={<Ionicons name="add-circle" size={18} color="#fff" />}
+                />
+              </View>
+            )}
 
             <Text
               style={{
@@ -124,38 +213,51 @@ export function AddServiceSheet({ visible, onClose, onAdd }: Props) {
                 fontWeight: '700',
                 letterSpacing: 1,
                 marginBottom: 8,
-                marginTop: 4,
+                marginTop: 16,
               }}
             >
               JASA
             </Text>
-            {loading ? (
-              <Text style={{ color: theme.colors.textMuted, textAlign: 'center', padding: 12 }}>
-                Memuat...
-              </Text>
-            ) : filteredServices.length === 0 ? (
-              <Text style={{ color: theme.colors.textMuted, textAlign: 'center', padding: 12 }}>
-                Tidak ada jasa
-              </Text>
-            ) : (
-              filteredServices.map((svc, i) => (
-                <Pressable
-                  key={`${svc.name}-${i}`}
-                  onPress={() => {
-                    onAdd({ service_name: svc.name, price: svc.price });
-                  }}
-                  style={({ pressed }) => ({
+
+            <FlatList
+              data={filteredServices}
+              keyExtractor={(item, index) => `${item.name}-${index}`}
+              onEndReached={handleEndReached}
+              onEndReachedThreshold={0.5}
+              ListFooterComponent={loading && services.length > 0 ? () => (
+                <Text style={{ color: theme.colors.textMuted, textAlign: 'center', padding: 12 }}>
+                  Memuat...
+                </Text>
+              ) : undefined}
+              ListEmptyComponent={() => {
+                if (loading) {
+                  return (
+                    <Text style={{ color: theme.colors.textMuted, textAlign: 'center', padding: 12 }}>
+                      Memuat...
+                    </Text>
+                  );
+                }
+                return (
+                  <Text style={{ color: theme.colors.textMuted, textAlign: 'center', padding: 12 }}>
+                    Tidak ada jasa
+                  </Text>
+                );
+              }}
+              style={{ maxHeight: 400 }}
+              renderItem={({ item }) => (
+                <View
+                  style={{
+                    width: '100%',
                     flexDirection: 'row',
                     alignItems: 'center',
-                    gap: 12,
-                    paddingHorizontal: 16,
-                    paddingVertical: 14,
-                    backgroundColor: pressed ? theme.colors.cardLight : theme.colors.card,
+                    backgroundColor: theme.colors.card,
                     borderRadius: theme.radius.lg,
                     marginBottom: 10,
                     borderWidth: 1,
                     borderColor: theme.colors.border,
-                  })}
+                    paddingHorizontal: 16,
+                    paddingVertical: 14,
+                  }}
                 >
                   <View
                     style={{
@@ -165,67 +267,32 @@ export function AddServiceSheet({ visible, onClose, onAdd }: Props) {
                       backgroundColor: theme.colors.accent + '15',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      flexShrink: 0,
+                      marginRight: 12,
                     }}
                   >
                     <Ionicons name="build" size={18} color={theme.colors.accent} />
                   </View>
-                  <Text
-                    style={{ color: theme.colors.text, fontSize: 15, fontWeight: '600', flex: 1 }}
+                  <Pressable
+                    onPress={() => {
+                      onAdd({ service_name: item.name, price: item.price });
+                    }}
+                    style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }}
                   >
-                    {svc.name}
-                  </Text>
+                    <Text
+                      style={{ color: theme.colors.text, fontSize: 15, fontWeight: '600', flex: 1 }}
+                    >
+                      {item.name}
+                    </Text>
+                  </Pressable>
                   <Text
-                    style={{ color: theme.colors.accent, fontSize: 15, fontWeight: '700', flexShrink: 0, marginLeft: 8 }}
+                    style={{ color: theme.colors.accent, fontSize: 15, fontWeight: '700', marginLeft: 8 }}
                   >
-                    {formatCurrency(svc.price)}
+                    {formatCurrency(item.price)}
                   </Text>
-                </Pressable>
-              ))
-            )}
-
-            <Text
-              style={{
-                color: theme.colors.textMuted,
-                fontSize: 11,
-                fontWeight: '700',
-                letterSpacing: 1,
-                marginTop: 12,
-                marginBottom: 8,
-              }}
-            >
-              JASA KUSTOM
-            </Text>
-            <View
-              style={{
-                padding: 14,
-                backgroundColor: theme.colors.card,
-                borderRadius: theme.radius.lg,
-                borderWidth: 1,
-                borderColor: theme.colors.border,
-                marginBottom: 12,
-              }}
-            >
-              <Input
-                value={customName}
-                onChangeText={setCustomName}
-                placeholder="Nama jasa..."
-              />
-              <Input
-                value={customPrice}
-                onChangeText={setCustomPrice}
-                placeholder="Harga (Rp)"
-                keyboardType="numeric"
-              />
-              <Button
-                title="Tambahkan Jasa Kustom"
-                fullWidth
-                onPress={submitCustom}
-                disabled={!customName.trim()}
-                icon={<Ionicons name="add-circle" size={18} color="#fff" />}
-              />
-            </View>
-          </ScrollView>
+                </View>
+              )}
+            />
+          </View>
 
           <View style={{ paddingHorizontal: 20, paddingTop: 8 }}>
             <Button title="Tutup" variant="ghost" fullWidth onPress={close} />

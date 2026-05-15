@@ -110,7 +110,7 @@ export default function RemindersScreen() {
       <FlatList
         data={reminders}
         keyExtractor={(r) => r.id}
-        contentContainerStyle={{ padding: 16, paddingBottom: 40 }}
+        contentContainerStyle={{ padding: 16, paddingBottom: 40 + (Platform.OS === 'android' ? 48 : 34) }}
         ListEmptyComponent={
           <EmptyState
             icon="alarm-outline"

@@ -8,18 +8,23 @@ import { EmptyState } from '../../src/components/ui/EmptyState';
 import { ScreenHeader } from '../../src/components/ui/ScreenHeader';
 import { SearchBar } from '../../src/components/ui/SearchBar';
 import { SkeletonCard } from '../../src/components/ui/Skeleton';
-import { theme } from '../../src/constants/theme';
+import { useTheme } from '../../src/contexts/ThemeContext';
 import { useCustomerStore } from '../../src/store/useCustomerStore';
 
 export default function CustomersScreen() {
   const router = useRouter();
-  const { customers, loading, search, setSearch, load } = useCustomerStore();
+  const { customers, loading, hasMore, search, setSearch, load, loadMore } = useCustomerStore();
+  const { theme } = useTheme();
 
   useFocusEffect(
     useCallback(() => {
       load();
     }, [load])
   );
+
+  const handleEndReached = () => {
+    loadMore();
+  };
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
@@ -66,6 +71,13 @@ export default function CustomersScreen() {
             paddingBottom: 100,
           }}
           ItemSeparatorComponent={() => <View style={{ height: 12 }} />}
+          onEndReached={handleEndReached}
+          onEndReachedThreshold={0.5}
+          ListFooterComponent={loading && customers.length > 0 ? () => (
+            <View style={{ padding: 16 }}>
+              <SkeletonCard />
+            </View>
+          ) : undefined}
           ListEmptyComponent={
             <EmptyState
               icon="people-outline"
@@ -83,7 +95,7 @@ export default function CustomersScreen() {
                 }
                 padding="md"
               >
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 12 }}>
                   {/* Avatar with initial */}
                   <View
                     style={{

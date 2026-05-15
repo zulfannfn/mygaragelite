@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { FlatList, Modal, Pressable, Text, View } from 'react-native';
-import { theme } from '../../constants/theme';
+import { useTheme } from '../../contexts/ThemeContext';
 import { sparepartService } from '../../services/sparepartService';
 import { Sparepart } from '../../types';
 import { formatCurrency } from '../../utils/currency';
@@ -15,21 +15,55 @@ interface Props {
   onPick: (sp: Sparepart, qty: number) => void;
 }
 
+const PAGE_SIZE = 20;
+
 export function AddSparepartSheet({ visible, onClose, onPick }: Props) {
+  const { theme } = useTheme();
   const [items, setItems] = useState<Sparepart[]>([]);
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<Sparepart | null>(null);
   const [qty, setQty] = useState(1);
+  const [loading, setLoading] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+
+  const loadSpareparts = useCallback(async (offset = 0) => {
+    if (offset === 0) {
+      setLoading(true);
+      setItems([]);
+    }
+    try {
+      const data = await sparepartService.getAll(search, PAGE_SIZE, offset);
+      if (offset === 0) {
+        setItems(data);
+        setHasMore(data.length === PAGE_SIZE);
+      } else {
+        setItems((prev) => [...prev, ...data]);
+        setHasMore(data.length === PAGE_SIZE);
+      }
+    } catch (error) {
+      console.error('Error loading spareparts:', error);
+    } finally {
+      setLoading(false);
+    }
+  }, [search]);
 
   useEffect(() => {
     if (visible) {
-      sparepartService.getAll().then(setItems);
+      loadSpareparts(0);
     } else {
       setSelected(null);
       setSearch('');
       setQty(1);
+      setItems([]);
+      setHasMore(true);
     }
-  }, [visible]);
+  }, [visible, loadSpareparts]);
+
+  const handleEndReached = () => {
+    if (!loading && hasMore) {
+      loadSpareparts(items.length);
+    }
+  };
 
   const filtered = useMemo(
     () =>
@@ -92,76 +126,94 @@ export function AddSparepartSheet({ visible, onClose, onPick }: Props) {
                 keyExtractor={(it) => it.id}
                 contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 12 }}
                 ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
+                onEndReached={handleEndReached}
+                onEndReachedThreshold={0.5}
+                ListFooterComponent={loading && items.length > 0 ? () => (
+                  <Text style={{ color: theme.colors.textMuted, textAlign: 'center', padding: 12 }}>
+                    Memuat...
+                  </Text>
+                ) : undefined}
                 ListEmptyComponent={
-                  <EmptyState
-                    icon="cube-outline"
-                    title="Tidak ditemukan"
-                    description="Coba kata kunci lain"
-                  />
+                  loading ? (
+                    <Text style={{ color: theme.colors.textMuted, textAlign: 'center', padding: 12 }}>
+                      Memuat...
+                    </Text>
+                  ) : (
+                    <EmptyState
+                      icon="cube-outline"
+                      title="Tidak ditemukan"
+                      description="Coba kata kunci lain"
+                    />
+                  )
                 }
                 renderItem={({ item }) => {
                   const isOut = item.stock <= 0;
                   return (
-                    <Pressable
-                      onPress={() => !isOut && setSelected(item)}
-                      disabled={isOut}
-                      style={({ pressed }) => ({
+                    <View
+                      style={{
+                        width: '100%',
                         flexDirection: 'row',
                         alignItems: 'flex-start',
-                        gap: 12,
                         padding: 14,
                         borderRadius: theme.radius.lg,
-                        backgroundColor: pressed ? theme.colors.cardLight : theme.colors.card,
+                        backgroundColor: theme.colors.card,
                         borderWidth: 1,
                         borderColor: theme.colors.border,
                         opacity: isOut ? 0.5 : 1,
-                      })}
+                      }}
                     >
-                      <View
-                        style={{
-                          width: 44,
-                          height: 44,
-                          borderRadius: 12,
-                          backgroundColor: isOut ? theme.colors.borderLight : theme.colors.warning + '15',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          flexShrink: 0,
-                        }}
+                      <Pressable
+                        onPress={() => !isOut && setSelected(item)}
+                        disabled={isOut}
+                        style={{ flexDirection: 'row', alignItems: 'flex-start', flex: 1 }}
                       >
-                        <Ionicons name="cube" size={20} color={isOut ? theme.colors.textMuted : theme.colors.warning} />
-                      </View>
-                      <View style={{ flex: 1, gap: 4 }}>
-                        <Text
+                        <View
                           style={{
-                            color: theme.colors.text,
-                            fontSize: 15,
-                            fontWeight: '600',
-                          }}
-                          numberOfLines={1}
-                        >
-                          {item.name}
-                        </Text>
-                        <Text
-                          style={{
-                            color: isOut ? theme.colors.danger : theme.colors.textSecondary,
-                            fontSize: 12,
+                            width: 44,
+                            height: 44,
+                            borderRadius: 12,
+                            backgroundColor: isOut ? theme.colors.borderLight : theme.colors.warning + '15',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            marginRight: 12,
                           }}
                         >
-                          {isOut ? 'STOK HABIS' : `Stok: ${item.stock}`} • {item.category}
-                        </Text>
-                      </View>
+                          <Ionicons name="cube" size={20} color={isOut ? theme.colors.textMuted : theme.colors.warning} />
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Text
+                            style={{
+                              color: theme.colors.text,
+                              fontSize: 15,
+                              fontWeight: '600',
+                            }}
+                            numberOfLines={1}
+                          >
+                            {item.name}
+                          </Text>
+                          <Text
+                            style={{
+                              color: isOut ? theme.colors.danger : theme.colors.textSecondary,
+                              fontSize: 12,
+                              marginTop: 4,
+                            }}
+                          >
+                            {isOut ? 'STOK HABIS' : `Stok: ${item.stock}`} • {item.category}
+                          </Text>
+                        </View>
+                      </Pressable>
                       <Text
                         style={{
                           color: theme.colors.accent,
                           fontSize: 15,
                           fontWeight: '700',
-                          flexShrink: 0,
                           marginLeft: 8,
+                          flexShrink: 0,
                         }}
                       >
                         {formatCurrency(item.sell_price)}
                       </Text>
-                    </Pressable>
+                    </View>
                   );
                 }}
               />

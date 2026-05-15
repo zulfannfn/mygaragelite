@@ -1,14 +1,14 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
 import React, { useCallback, useMemo, useState } from 'react';
-import { FlatList, Modal, Pressable, ScrollView, Text, View } from 'react-native';
+import { FlatList, Modal, Platform, Pressable, ScrollView, Text, View } from 'react-native';
 import { Badge } from '../../src/components/ui/Badge';
 import { Card } from '../../src/components/ui/Card';
 import { EmptyState } from '../../src/components/ui/EmptyState';
 import { ScreenHeader } from '../../src/components/ui/ScreenHeader';
 import { SearchBar } from '../../src/components/ui/SearchBar';
 import { SkeletonCard } from '../../src/components/ui/Skeleton';
-import { theme } from '../../src/constants/theme';
+import { useTheme } from '../../src/contexts/ThemeContext';
 import { useSparepartStore } from '../../src/store/useSparepartStore';
 import { formatCurrency } from '../../src/utils/currency';
 
@@ -16,7 +16,8 @@ type FilterKey = 'all' | 'low' | 'out' | string;
 
 export default function SparepartsScreen() {
   const router = useRouter();
-  const { spareparts, loading, search, setSearch, load } = useSparepartStore();
+  const { theme } = useTheme();
+  const { spareparts, loading, hasMore, search, setSearch, load, loadMore } = useSparepartStore();
   const [filter, setFilter] = useState<FilterKey>('all');
   const [filterModalOpen, setFilterModalOpen] = useState(false);
   const [tempFilter, setTempFilter] = useState<FilterKey>('all');
@@ -26,6 +27,10 @@ export default function SparepartsScreen() {
       load();
     }, [load])
   );
+
+  const handleEndReached = () => {
+    loadMore();
+  };
 
   const lowStockCount = spareparts.filter((s) => s.stock > 0 && s.stock <= s.min_stock).length;
   const outStockCount = spareparts.filter((s) => s.stock <= 0).length;
@@ -223,9 +228,16 @@ export default function SparepartsScreen() {
           contentContainerStyle={{
             paddingHorizontal: 16,
             paddingTop: 8,
-            paddingBottom: 100,
+            paddingBottom: 100 + (Platform.OS === 'android' ? 48 : 34),
           }}
           ItemSeparatorComponent={() => <View style={{ height: 12 }} />}
+          onEndReached={handleEndReached}
+          onEndReachedThreshold={0.5}
+          ListFooterComponent={loading && spareparts.length > 0 ? () => (
+            <View style={{ padding: 16 }}>
+              <SkeletonCard />
+            </View>
+          ) : undefined}
           ListEmptyComponent={
             <EmptyState
               icon="cube-outline"

@@ -16,26 +16,44 @@ interface TransactionFilters {
 interface TransactionState {
   transactions: Transaction[];
   loading: boolean;
+  hasMore: boolean;
   filters: TransactionFilters;
   setFilters: (f: Partial<TransactionFilters>) => void;
   load: () => Promise<void>;
+  loadMore: () => Promise<void>;
   add: (input: TransactionInput) => Promise<Transaction>;
   updateStatus: (id: string, status: TransactionStatus, payment?: PaymentMethod | null) => Promise<void>;
   remove: (id: string) => Promise<void>;
 }
 
+const PAGE_SIZE = 20;
+
 export const useTransactionStore = create<TransactionState>((set, get) => ({
   transactions: [],
   loading: false,
+  hasMore: true,
   filters: { search: '' },
   setFilters: (f) => {
-    set({ filters: { ...get().filters, ...f } });
+    set({ filters: { ...get().filters, ...f }, transactions: [], hasMore: true });
     get().load();
   },
   load: async () => {
     set({ loading: true });
-    const data = await transactionService.getAll(get().filters);
-    set({ transactions: data, loading: false });
+    const data = await transactionService.getAll(get().filters, PAGE_SIZE, 0);
+    set({ transactions: data, loading: false, hasMore: data.length === PAGE_SIZE });
+  },
+  loadMore: async () => {
+    const { transactions, loading, hasMore, filters } = get();
+    if (loading || !hasMore) return;
+    
+    set({ loading: true });
+    const offset = transactions.length;
+    const data = await transactionService.getAll(filters, PAGE_SIZE, offset);
+    set({
+      transactions: [...transactions, ...data],
+      loading: false,
+      hasMore: data.length === PAGE_SIZE,
+    });
   },
   add: async (input) => {
     const tx = await transactionService.create(input);

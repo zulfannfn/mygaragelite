@@ -7,7 +7,7 @@ import { Input } from '../src/components/ui/Input';
 import { Picker } from '../src/components/ui/Picker';
 import { ScreenHeader } from '../src/components/ui/ScreenHeader';
 import { VEHICLE_TYPES } from '../src/constants/config';
-import { theme } from '../src/constants/theme';
+import { useTheme } from '../src/contexts/ThemeContext';
 import { customerService } from '../src/services/customerService';
 import { useAppStore } from '../src/store/useAppStore';
 import { useCustomerStore } from '../src/store/useCustomerStore';
@@ -19,6 +19,7 @@ export default function CustomerForm() {
   const { id } = useLocalSearchParams<{ id?: string }>();
   const isEdit = !!id;
   const showToast = useAppStore((s) => s.showToast);
+  const { theme } = useTheme();
   const { add, update, remove } = useCustomerStore();
 
   const [name, setName] = useState('');
@@ -121,6 +122,10 @@ export default function CustomerForm() {
             value={vehicleType}
             options={VEHICLE_TYPES}
             onChange={(v) => setVehicleType(v as VehicleType)}
+            optionIcons={{
+              Motor: 'bicycle',
+              Mobil: 'car',
+            }}
           />
           <Input
             label="Merk / Tipe Kendaraan"

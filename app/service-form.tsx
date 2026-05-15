@@ -5,7 +5,7 @@ import { Button } from '../src/components/ui/Button';
 import { ConfirmDialog } from '../src/components/ui/ConfirmDialog';
 import { Input } from '../src/components/ui/Input';
 import { ScreenHeader } from '../src/components/ui/ScreenHeader';
-import { theme } from '../src/constants/theme';
+import { useTheme } from '../src/contexts/ThemeContext';
 import { serviceService } from '../src/services/serviceService';
 import { useAppStore } from '../src/store/useAppStore';
 import { isEmpty } from '../src/utils/validation';
@@ -15,6 +15,7 @@ export default function ServiceForm() {
   const { id } = useLocalSearchParams<{ id?: string }>();
   const isEdit = !!id;
   const showToast = useAppStore((s) => s.showToast);
+  const { theme } = useTheme();
 
   const [name, setName] = useState('');
   const [price, setPrice] = useState('');
@@ -78,7 +79,7 @@ export default function ServiceForm() {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={{ flex: 1 }}
       >
-        <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 40 }}>
+        <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 40 + (Platform.OS === 'android' ? 48 : 34) }}>
           <Input
             label="Nama Jasa *"
             value={name}

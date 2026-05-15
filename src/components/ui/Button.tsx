@@ -1,6 +1,6 @@
 import React from 'react';
 import { ActivityIndicator, Pressable, Text, View, ViewStyle } from 'react-native';
-import { theme } from '../../constants/theme';
+import { useTheme } from '../../contexts/ThemeContext';
 
 type Variant = 'primary' | 'secondary' | 'outline' | 'ghost' | 'danger' | 'success';
 type Size = 'sm' | 'md' | 'lg';
@@ -28,6 +28,7 @@ export function Button({
   fullWidth,
   style,
 }: Props) {
+  const { theme } = useTheme();
   const isDisabled = disabled || loading;
 
   const bg: Record<Variant, string> = {
@@ -72,7 +73,7 @@ export function Button({
         {
           backgroundColor: bg[variant],
           borderColor: border[variant],
-          borderWidth: variant === 'outline' ? 1 : 0,
+          borderWidth: 1,
           minHeight: sizing[size].minH,
           paddingHorizontal: sizing[size].h,
           paddingVertical: 6,
@@ -96,11 +97,11 @@ export function Button({
         style,
       ]}
     >
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: sizing[size].gap }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
         {loading ? (
-          <ActivityIndicator size="small" color={fg[variant]} />
+          <ActivityIndicator size="small" color={fg[variant]} style={{ marginRight: sizing[size].gap }} />
         ) : (
-          icon
+          icon && <View style={{ marginRight: sizing[size].gap }}>{icon}</View>
         )}
         <Text
           style={{

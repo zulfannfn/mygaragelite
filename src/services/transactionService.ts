@@ -13,6 +13,8 @@ import { sparepartService } from './sparepartService';
 export interface TransactionInput {
   customer_id: string | null;
   mechanic_id?: string | null;
+  cashier_id?: string | null;
+  cashier_name?: string | null;
   mechanic_notes?: string;
   complaint?: string;
   recommendation?: string;
@@ -37,7 +39,7 @@ export const transactionService = {
     type?: TransactionType;
     startDate?: number;
     endDate?: number;
-  }): Promise<Transaction[]> {
+  }, limit?: number, offset?: number): Promise<Transaction[]> {
     const db = await getDatabase();
     let sql = `
       SELECT t.*, c.name as customer_name, c.plate_number as customer_plate, c.phone as customer_phone,
@@ -72,6 +74,17 @@ export const transactionService = {
     }
 
     sql += ' ORDER BY t.created_at DESC';
+    
+    if (limit !== undefined) {
+      sql += ' LIMIT ?';
+      params.push(limit);
+      
+      if (offset !== undefined) {
+        sql += ' OFFSET ?';
+        params.push(offset);
+      }
+    }
+    
     return await db.getAllAsync<Transaction>(sql, ...params);
   },
 
@@ -126,11 +139,13 @@ export const transactionService = {
 
     await db.withTransactionAsync(async () => {
       await db.runAsync(
-        `INSERT INTO transactions (id, customer_id, mechanic_id, mechanic_notes, complaint, recommendation, type, status, payment_method, paid_amount, change_amount, total_service, total_sparepart, total_amount, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO transactions (id, customer_id, mechanic_id, cashier_id, cashier_name, mechanic_notes, complaint, recommendation, type, status, payment_method, paid_amount, change_amount, total_service, total_sparepart, total_amount, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         id,
         input.customer_id,
         input.mechanic_id ?? null,
+        input.cashier_id ?? null,
+        input.cashier_name ?? '',
         input.mechanic_notes ?? '',
         input.complaint ?? '',
         input.recommendation ?? '',

@@ -1,41 +1,86 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
 import React, { useCallback, useState } from 'react';
-import {
-    Pressable,
-    RefreshControl,
-    ScrollView,
-    Text,
-    View,
-} from 'react-native';
+import { Modal, Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AdBanner } from '../../src/components/ui/AdBanner';
+import { Button } from '../../src/components/ui/Button';
 import { Card } from '../../src/components/ui/Card';
 import { SkeletonCard } from '../../src/components/ui/Skeleton';
-import { theme } from '../../src/constants/theme';
+import { useTheme } from '../../src/contexts/ThemeContext';
 import { reportService } from '../../src/services/reportService';
 import { transactionService } from '../../src/services/transactionService';
 import { useAppStore } from '../../src/store/useAppStore';
-import { DashboardStats, Transaction } from '../../src/types';
+import { DashboardStats, ReportData, Transaction } from '../../src/types';
 import { formatCompactCurrency, formatCurrency } from '../../src/utils/currency';
 import { formatRelative } from '../../src/utils/date';
+
+function MiniBarChart({ data, theme }: { data: ReportData[]; theme: any }) {
+  const maxRevenue = Math.max(...data.map((d) => d.revenue), 1);
+  const chartHeight = 60;
+  const barWidth = 16;
+  const gap = 4;
+
+  // Extract month from date (format: MM/YYYY or similar)
+  const getMonth = (date: string) => {
+    const parts = date.split('/');
+    return parts[0] || date; // First part is month (MM/YYYY format)
+  };
+
+  const barColor = '#87CEEB'; // Light blue color that works in both modes
+  const textColor = '#FFFFFF'; // White color that works in both modes
+
+  return (
+    <View style={{ width: 120, height: 100, justifyContent: 'flex-end' }}>
+      <View style={{ flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', height: chartHeight }}>
+        {data.map((d, i) => {
+          const height = (d.revenue / maxRevenue) * chartHeight;
+          return (
+            <View key={i} style={{ width: barWidth, height: chartHeight, justifyContent: 'flex-end' }}>
+              <View
+                style={{
+                  width: '100%',
+                  height: height,
+                  backgroundColor: barColor,
+                  borderRadius: 4,
+                }}
+              />
+            </View>
+          );
+        })}
+      </View>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 6 }}>
+        {data.map((d, i) => (
+          <Text key={i} style={{ color: textColor, fontSize: 8, textAlign: 'center', flex: 1 }}>
+            {getMonth(d.date)}
+          </Text>
+        ))}
+      </View>
+    </View>
+  );
+}
 
 export default function Dashboard() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const workshopName = useAppStore((s) => s.workshopName);
+  const { theme } = useTheme();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [pending, setPending] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [monthlyData, setMonthlyData] = useState<ReportData[]>([]);
+  const [transactionTypeModalOpen, setTransactionTypeModalOpen] = useState(false);
 
   const load = useCallback(async () => {
-    const [s, p] = await Promise.all([
+    const [s, p, m] = await Promise.all([
       reportService.getDashboardStats(),
       transactionService.getAll({ status: 'pending' }),
+      reportService.getMonthlyReport(4),
     ]);
     setStats(s);
     setPending(p.slice(0, 5));
+    setMonthlyData(m);
     setLoading(false);
   }, []);
 
@@ -52,24 +97,25 @@ export default function Dashboard() {
   };
 
   return (
-    <ScrollView
-      style={{ flex: 1, backgroundColor: theme.colors.background }}
-      contentContainerStyle={{ paddingBottom: 24 }}
-      refreshControl={
-        <RefreshControl
-          refreshing={refreshing}
-          onRefresh={onRefresh}
-          tintColor={theme.colors.accent}
-        />
-      }
-    >
+    <>
+      <ScrollView
+        style={{ flex: 1, backgroundColor: theme.colors.background }}
+        contentContainerStyle={{ paddingBottom: 24 }}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={theme.colors.accent}
+          />
+        }
+      >
       {/* Header */}
       <View style={{ paddingTop: insets.top + 12, paddingHorizontal: 20, paddingBottom: 16 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
           <View style={{ flex: 1 }}>
             <Text style={{ color: theme.colors.textSecondary, fontSize: 13 }}>Selamat datang</Text>
             <Text style={{ color: theme.colors.text, fontSize: 22, fontWeight: '800', marginTop: 2 }}>
-              {workshopName} 🔧
+              {workshopName}
             </Text>
           </View>
           <Pressable
@@ -92,35 +138,40 @@ export default function Dashboard() {
       {/* Hero Revenue */}
       <View style={{ paddingHorizontal: 16, marginBottom: 16 }}>
         <Card padding={20} style={{ backgroundColor: theme.colors.primary }}>
-          <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 12, fontWeight: '600' }}>
-            PENDAPATAN HARI INI
-          </Text>
-          {loading || !stats ? (
-            <Text style={{ color: '#fff', fontSize: 32, fontWeight: '800', marginTop: 4 }}>...</Text>
-          ) : (
-            <Text style={{ color: '#fff', fontSize: 32, fontWeight: '800', marginTop: 4 }}>
-              {formatCurrency(stats.todayRevenue)}
-            </Text>
-          )}
-          <View style={{ flexDirection: 'row', gap: 16, marginTop: 12 }}>
-            <View>
-              <Text style={{ color: 'rgba(255,255,255,0.6)', fontSize: 11 }}>Tahun ini</Text>
-              <Text style={{ color: '#fff', fontSize: 14, fontWeight: '700', marginTop: 2 }}>
-                {stats ? formatCompactCurrency(stats.yearRevenue) : '-'}
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+            <View style={{ flex: 1 }}>
+              <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 12, fontWeight: '600' }}>
+                PENDAPATAN HARI INI
               </Text>
+              {loading || !stats ? (
+                <Text style={{ color: '#fff', fontSize: 32, fontWeight: '800', marginTop: 4 }}>...</Text>
+              ) : (
+                <Text style={{ color: '#fff', fontSize: 32, fontWeight: '800', marginTop: 4 }}>
+                  {formatCurrency(stats.todayRevenue)}
+                </Text>
+              )}
+              <View style={{ flexDirection: 'row', gap: 16, marginTop: 12 }}>
+                <View>
+                  <Text style={{ color: 'rgba(255,255,255,0.6)', fontSize: 11 }}>Tahun ini</Text>
+                  <Text style={{ color: '#fff', fontSize: 14, fontWeight: '700', marginTop: 2 }}>
+                    {stats ? formatCompactCurrency(stats.yearRevenue) : '-'}
+                  </Text>
+                </View>
+                <View>
+                  <Text style={{ color: 'rgba(255,255,255,0.6)', fontSize: 11 }}>Bulan ini</Text>
+                  <Text style={{ color: '#fff', fontSize: 14, fontWeight: '700', marginTop: 2 }}>
+                    {stats ? formatCompactCurrency(stats.monthRevenue) : '-'}
+                  </Text>
+                </View>
+                <View>
+                  <Text style={{ color: 'rgba(255,255,255,0.6)', fontSize: 11 }}>Belum lunas</Text>
+                  <Text style={{ color: '#fff', fontSize: 14, fontWeight: '700', marginTop: 2 }}>
+                    {stats?.pendingTransactions ?? 0}
+                  </Text>
+                </View>
+              </View>
             </View>
-            <View>
-              <Text style={{ color: 'rgba(255,255,255,0.6)', fontSize: 11 }}>Bulan ini</Text>
-              <Text style={{ color: '#fff', fontSize: 14, fontWeight: '700', marginTop: 2 }}>
-                {stats ? formatCompactCurrency(stats.monthRevenue) : '-'}
-              </Text>
-            </View>
-            <View>
-              <Text style={{ color: 'rgba(255,255,255,0.6)', fontSize: 11 }}>Belum lunas</Text>
-              <Text style={{ color: '#fff', fontSize: 14, fontWeight: '700', marginTop: 2 }}>
-                {stats?.pendingTransactions ?? 0}
-              </Text>
-            </View>
+            <MiniBarChart data={monthlyData} theme={theme} />
           </View>
         </Card>
       </View>
@@ -133,12 +184,14 @@ export default function Dashboard() {
             value={loading ? '-' : String(stats?.totalTransactions ?? 0)}
             icon="receipt"
             color={theme.colors.blue}
+            theme={theme}
           />
           <StatCard
             title="Total Sparepart"
             value={loading ? '-' : String(stats?.totalSpareparts ?? 0)}
             icon="cube"
             color={theme.colors.success}
+            theme={theme}
           />
         </View>
         <View style={{ flexDirection: 'row', gap: 10, marginBottom: 10 }}>
@@ -147,12 +200,14 @@ export default function Dashboard() {
             value={loading ? '-' : String(stats?.totalServices ?? 0)}
             icon="construct"
             color={theme.colors.accent}
+            theme={theme}
           />
           <StatCard
             title="Pending"
             value={loading ? '-' : String(stats?.pendingTransactions ?? 0)}
             icon="time"
             color={theme.colors.warning}
+            theme={theme}
           />
         </View>
         <View style={{ flexDirection: 'row', gap: 10 }}>
@@ -161,12 +216,14 @@ export default function Dashboard() {
             value={loading ? '-' : String(stats?.lowStockCount ?? 0)}
             icon="warning"
             color={theme.colors.warning}
+            theme={theme}
           />
           <StatCard
             title="Stok Habis"
             value={loading ? '-' : String(stats?.outOfStockCount ?? 0)}
             icon="alert-circle"
             color={theme.colors.danger}
+            theme={theme}
           />
         </View>
       </View>
@@ -188,38 +245,37 @@ export default function Dashboard() {
       >
         <QuickAction
           icon="add-circle"
-          label="Servis Baru"
+          label="Transaksi Baru"
           color={theme.colors.accent}
-          onPress={() => router.push('/transaction-form')}
+          theme={theme}
+          onPress={() => setTransactionTypeModalOpen(true)}
         />
         <QuickAction
           icon="person-add"
           label="Pelanggan"
           color={theme.colors.blue}
+          theme={theme}
           onPress={() => router.push('/customer-form')}
         />
         <QuickAction
           icon="construct"
           label="Jasa"
           color={theme.colors.primaryLight}
+          theme={theme}
           onPress={() => router.push('/services')}
         />
         <QuickAction
           icon="cube"
           label="Sparepart"
           color={theme.colors.success}
+          theme={theme}
           onPress={() => router.push('/sparepart-form')}
-        />
-        <QuickAction
-          icon="alarm"
-          label="Reminder"
-          color={theme.colors.warning}
-          onPress={() => router.push('/reminders')}
         />
         <QuickAction
           icon="people"
           label="Karyawan"
           color={theme.colors.primaryLight}
+          theme={theme}
           onPress={() => router.push('/employees')}
         />
       </View>
@@ -301,7 +357,69 @@ export default function Dashboard() {
         )}
       </View>
 
-    </ScrollView>
+      </ScrollView>
+
+      <Modal visible={transactionTypeModalOpen} transparent animationType="fade" onRequestClose={() => setTransactionTypeModalOpen(false)}>
+        <Pressable
+          onPress={() => setTransactionTypeModalOpen(false)}
+          style={{
+            flex: 1,
+            backgroundColor: 'rgba(0,0,0,0.7)',
+            justifyContent: 'center',
+            paddingHorizontal: 32,
+            paddingTop: insets.top,
+            paddingBottom: insets.bottom,
+          }}
+        >
+          <Pressable
+            onPress={(e) => e.stopPropagation()}
+            style={{
+              backgroundColor: theme.colors.card,
+              borderRadius: theme.radius.lg,
+              padding: 24,
+              width: '100%',
+              maxWidth: 400,
+              alignSelf: 'center',
+            }}
+          >
+            <Text
+              style={{
+                color: theme.colors.text,
+                fontSize: 18,
+                fontWeight: '700',
+                marginBottom: 8,
+              }}
+            >
+              Pilih Jenis Transaksi
+            </Text>
+            <Text style={{ color: theme.colors.textSecondary, fontSize: 14, lineHeight: 20, marginBottom: 20 }}>
+              Apakah ini transaksi servis atau kasir (retail)?
+            </Text>
+            <View style={{ flexDirection: 'column', gap: 10 }}>
+              <Button
+                title="Servis"
+                onPress={() => {
+                  setTransactionTypeModalOpen(false);
+                  router.push({ pathname: '/transaction-form', params: { type: 'service' } });
+                }}
+                fullWidth
+                icon={<Ionicons name="construct" size={18} color="#fff" />}
+              />
+              <Button
+                title="Kasir (Retail)"
+                onPress={() => {
+                  setTransactionTypeModalOpen(false);
+                  router.push({ pathname: '/transaction-form', params: { type: 'retail' } });
+                }}
+                fullWidth
+                variant="outline"
+                icon={<Ionicons name="cart" size={18} color={theme.colors.accent} />}
+              />
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+    </>
   );
 }
 
@@ -310,14 +428,16 @@ function StatCard({
   value,
   icon,
   color,
+  theme,
 }: {
   title: string;
   value: string;
   icon: keyof typeof Ionicons.glyphMap;
   color: string;
+  theme: any;
 }) {
   return (
-    <Card style={{ flex: 1 }} padding={14}>
+    <Card padding="sm" style={{ flex: 1 }}>
       <View
         style={{
           width: 36,
@@ -346,11 +466,13 @@ function QuickAction({
   label,
   color,
   onPress,
+  theme,
 }: {
   icon: keyof typeof Ionicons.glyphMap;
   label: string;
   color: string;
   onPress: () => void;
+  theme: any;
 }) {
   return (
     <Pressable
@@ -378,7 +500,7 @@ function QuickAction({
       >
         <Ionicons name={icon} size={22} color={color} />
       </View>
-      <Text style={{ color: theme.colors.text, fontSize: 11, fontWeight: '600', textAlign: 'center' }}>
+      <Text style={{ color: theme.colors.text, fontSize: 12, fontWeight: '600', textAlign: 'center' }}>
         {label}
       </Text>
     </Pressable>

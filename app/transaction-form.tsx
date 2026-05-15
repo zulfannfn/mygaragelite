@@ -1,15 +1,15 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
-    FlatList,
-    KeyboardAvoidingView,
-    Modal,
-    Platform,
-    Pressable,
-    ScrollView,
-    Text,
-    View,
+  FlatList,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  Pressable,
+  ScrollView,
+  Text,
+  View
 } from 'react-native';
 import { InterstitialAd } from '../src/components/ui/AdBanner';
 import { Button } from '../src/components/ui/Button';
@@ -19,24 +19,23 @@ import { Picker } from '../src/components/ui/Picker';
 import { ScreenHeader } from '../src/components/ui/ScreenHeader';
 import { SearchBar } from '../src/components/ui/SearchBar';
 import { WhatsAppTemplateModal } from '../src/components/ui/WhatsAppTemplateModal';
-import { PAYMENT_METHODS, TRANSACTION_STATUS } from '../src/constants/config';
-import { theme } from '../src/constants/theme';
+import { PAYMENT_METHODS } from '../src/constants/config';
+import { useTheme } from '../src/contexts/ThemeContext';
 import { customerService } from '../src/services/customerService';
 import { employeeService } from '../src/services/employeeService';
 import { receiptService } from '../src/services/receiptService';
 import { serviceService } from '../src/services/serviceService';
 import { sparepartService } from '../src/services/sparepartService';
-import { transactionService } from '../src/services/transactionService';
 import { useAppStore } from '../src/store/useAppStore';
 import { useTransactionStore } from '../src/store/useTransactionStore';
 import {
-    Customer,
-    Employee,
-    PaymentMethod,
-    Sparepart,
-    Transaction,
-    TransactionStatus,
-    TransactionType,
+  Customer,
+  Employee,
+  PaymentMethod,
+  Sparepart,
+  Transaction,
+  TransactionStatus,
+  TransactionType,
 } from '../src/types';
 import { formatCurrency, parseCurrency } from '../src/utils/currency';
 
@@ -54,19 +53,39 @@ interface SparepartLine {
 
 export default function TransactionForm() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ type?: 'service' | 'retail' }>();
+  const { theme } = useTheme();
   const showToast = useAppStore((s) => s.showToast);
   const { add } = useTransactionStore();
+
+  const sectionTitle = {
+    color: theme.colors.text,
+    fontSize: 14,
+    fontWeight: '700' as const,
+    marginBottom: 6,
+  };
+
+  const qtyBtn = {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: theme.colors.primary,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  };
 
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [spareparts, setSpareparts] = useState<Sparepart[]>([]);
   const [mechanics, setMechanics] = useState<Employee[]>([]);
+  const [cashiers, setCashiers] = useState<Employee[]>([]);
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [selectedMechanicId, setSelectedMechanicId] = useState<string | null>(null);
+  const [selectedCashierId, setSelectedCashierId] = useState<string | null>(null);
   const [services, setServices] = useState<ServiceLine[]>([]);
   const [parts, setParts] = useState<SparepartLine[]>([]);
   const [complaint, setComplaint] = useState('');
-  const [transactionType, setTransactionType] = useState<TransactionType>('service');
-  const [status, setStatus] = useState<TransactionStatus>('paid');
+  const [transactionType, setTransactionType] = useState<TransactionType>(params.type === 'retail' ? 'retail' : 'service');
+  const [status, setStatus] = useState<TransactionStatus>('pending');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('Tunai');
   const [paidAmount, setPaidAmount] = useState('');
   const [loading, setLoading] = useState(false);
@@ -91,6 +110,7 @@ export default function TransactionForm() {
     customerService.getAll().then(setCustomers);
     sparepartService.getAll().then(setSpareparts);
     employeeService.getMechanics().then(setMechanics);
+    employeeService.getCashiers().then(setCashiers);
   }, []);
 
   useEffect(() => {
@@ -147,12 +167,21 @@ export default function TransactionForm() {
   const addSparepart = (sp: Sparepart) => {
     const exists = parts.find((p) => p.sparepart_id === sp.id);
     if (exists) {
+      const newQty = exists.quantity + 1;
+      if (newQty > sp.stock) {
+        showToast('Stok tidak mencukupi', 'error');
+        return;
+      }
       setParts((prev) =>
         prev.map((p) =>
-          p.sparepart_id === sp.id ? { ...p, quantity: p.quantity + 1 } : p
+          p.sparepart_id === sp.id ? { ...p, quantity: newQty } : p
         )
       );
     } else {
+      if (sp.stock < 1) {
+        showToast('Stok tidak mencukupi', 'error');
+        return;
+      }
       setParts((prev) => [
         ...prev,
         {
@@ -172,6 +201,10 @@ export default function TransactionForm() {
       prev.map((p, idx) => {
         if (idx !== i) return p;
         const next = Math.max(1, p.quantity + delta);
+        if (next > (p.max_stock || 0)) {
+          showToast('Stok tidak mencukupi', 'error');
+          return p;
+        }
         return { ...p, quantity: next };
       })
     );
@@ -184,8 +217,12 @@ export default function TransactionForm() {
       showToast('Pilih pelanggan dulu', 'error');
       return;
     }
-    if (!isRetail && services.length === 0 && parts.length === 0) {
-      showToast('Tambahkan minimal 1 jasa atau sparepart', 'error');
+    if (!isRetail && !selectedMechanicId) {
+      showToast('Pilih mekanik dulu', 'error');
+      return;
+    }
+    if (!isRetail && !complaint.trim()) {
+      showToast('Isi keluhan pelanggan dulu', 'error');
       return;
     }
     if (isRetail && parts.length === 0) {
@@ -215,6 +252,12 @@ export default function TransactionForm() {
     const isCash = paymentMethod === 'Tunai';
     const paid = isRetail ? (isCash ? parseCurrency(paidAmount) : total) : total;
     const change = isRetail && isCash ? Math.max(0, paid - total) : 0;
+    
+    // Get cashier info
+    const selectedCashier = cashiers.find((c) => c.id === selectedCashierId);
+    const cashierId = selectedCashierId;
+    const finalCashierName = selectedCashier?.name ?? '';
+    
     setLoading(true);
     try {
       const created = await add({
@@ -228,6 +271,8 @@ export default function TransactionForm() {
         payment_method: finalStatus === 'paid' ? paymentMethod : null,
         paid_amount: paid,
         change_amount: change,
+        cashier_id: cashierId,
+        cashier_name: finalCashierName || null,
         service_items: finalServices,
         spareparts: finalParts.map((p) => ({
           sparepart_id: p.sparepart_id,
@@ -236,11 +281,10 @@ export default function TransactionForm() {
           sell_price: p.sell_price,
         })),
       });
-      // Re-fetch with joins (mechanic_name, customer_phone) for receipt
-      const full = await transactionService.getById(created.id);
-      setSavedTx(full ?? created);
       showToast('Transaksi disimpan', 'success');
       InterstitialAd.show();
+      // Redirect to transaction detail page
+      router.replace(`/transaction-detail?id=${created.id}`);
     } catch (e: any) {
       showToast('Gagal menyimpan: ' + (e?.message ?? ''), 'error');
     } finally {
@@ -283,9 +327,9 @@ export default function TransactionForm() {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={{ flex: 1 }}
       >
-        <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 120 }}>
+        <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 120 + (Platform.OS === 'android' ? 48 : 34), gap: 20 }}>
           {/* Transaction type toggle */}
-          <View style={{ flexDirection: 'row', gap: 10, marginBottom: 10 }}>
+          <View style={{ flexDirection: 'row', gap: 10, marginBottom: 4 }}>
             <Pressable
               onPress={() => setTransactionType('service')}
               style={({ pressed }) => ({
@@ -355,7 +399,7 @@ export default function TransactionForm() {
           </View>
 
           {/* Customer */}
-          <View style={{ marginBottom: 6 }}>
+          <View>
             <Text style={sectionTitle}>
               Pelanggan{isRetail ? ' (opsional)' : ''}
             </Text>
@@ -399,28 +443,52 @@ export default function TransactionForm() {
 
           {/* Mekanik (opsional) */}
           {!isRetail && (
-            <View style={{ marginBottom: 4 }}>
+            <View>
               <Picker
-                label="Mekanik (opsional)"
+                label="Mekanik"
                 value={selectedMechanicId ?? ''}
-                options={['', ...mechanics.map((m) => m.id)]}
-                optionLabels={{
-                  '': 'Tidak ditentukan',
-                  ...Object.fromEntries(mechanics.map((m) => [m.id, m.name])),
-                }}
-                optionIcons={{
-                  '': 'construct-outline',
-                  ...Object.fromEntries(mechanics.map((m) => [m.id, 'construct'])),
-                }}
-                onChange={(v) => setSelectedMechanicId(v === '' ? null : v)}
+                options={mechanics.map((m) => m.id)}
+                optionLabels={Object.fromEntries(mechanics.map((m) => [m.id, m.name]))}
+                optionIcons={Object.fromEntries(mechanics.map((m) => [m.id, 'construct']))}
+                onChange={(v) => setSelectedMechanicId(v)}
                 placeholder="Pilih mekanik..."
+              />
+            </View>
+          )}
+
+          {/* Kasir (service mode) */}
+          {!isRetail && (
+            <View>
+              <Picker
+                label="Kasir"
+                value={selectedCashierId ?? ''}
+                options={cashiers.map((c) => c.id)}
+                optionLabels={Object.fromEntries(cashiers.map((c) => [c.id, c.name]))}
+                optionIcons={Object.fromEntries(cashiers.map((c) => [c.id, 'person']))}
+                onChange={(v) => setSelectedCashierId(v)}
+                placeholder="Pilih kasir..."
+              />
+            </View>
+          )}
+
+          {/* Kasir (retail mode) */}
+          {isRetail && (
+            <View>
+              <Picker
+                label="Kasir"
+                value={selectedCashierId ?? ''}
+                options={cashiers.map((c) => c.id)}
+                optionLabels={Object.fromEntries(cashiers.map((c) => [c.id, c.name]))}
+                optionIcons={Object.fromEntries(cashiers.map((c) => [c.id, 'person']))}
+                onChange={(v) => setSelectedCashierId(v)}
+                placeholder="Pilih kasir..."
               />
             </View>
           )}
 
           {/* Keluhan Pelanggan */}
           {!isRetail && (
-            <View style={{ marginBottom: 6 }}>
+            <View>
               <Text style={sectionTitle}>Keluhan Pelanggan</Text>
               <Input
                 value={complaint}
@@ -433,35 +501,34 @@ export default function TransactionForm() {
             </View>
           )}
 
-          {/* Services */}
-          {!isRetail && (
+          {/* Services - hidden, will be added in detail page */}
+          {false && !isRetail && (
             <View style={{ marginBottom: 6 }}>
               <View
                 style={{
                   flexDirection: 'row',
                   justifyContent: 'space-between',
                   alignItems: 'center',
-                  marginBottom: 6,
+                  marginBottom: 8
                 }}
               >
                 <Text style={sectionTitle}>Jasa Servis</Text>
                 <Pressable
                   onPress={() => setServicePickerOpen(true)}
-                  hitSlop={8}
                   style={({ pressed }) => ({
                     flexDirection: 'row',
                     alignItems: 'center',
-                    gap: 4,
+                    gap: 6,
                     paddingHorizontal: 12,
-                    paddingVertical: 8,
-                    borderRadius: theme.radius.full,
-                    backgroundColor: theme.colors.accent + '20',
+                    paddingVertical: 6,
+                    borderRadius: theme.radius.md,
+                    backgroundColor: theme.colors.accent + '15',
                     opacity: pressed ? 0.7 : 1,
                   })}
                 >
-                  <Ionicons name="add" size={14} color={theme.colors.accent} />
-                  <Text style={{ color: theme.colors.accent, fontWeight: '700', fontSize: 12 }}>
-                    Tambah
+                  <Ionicons name="add-circle" size={16} color={theme.colors.accent} />
+                  <Text style={{ color: theme.colors.accent, fontSize: 12, fontWeight: '700' }}>
+                    Tambah Jasa
                   </Text>
                 </Pressable>
               </View>
@@ -531,14 +598,15 @@ export default function TransactionForm() {
             </View>
           )}
 
-          {/* Spareparts */}
-          <View style={{ marginBottom: 6 }}>
+          {/* Spareparts - hidden for service, shown for retail */}
+          {isRetail && (
+            <View>
               <View
                 style={{
                   flexDirection: 'row',
                   justifyContent: 'space-between',
                   alignItems: 'center',
-                  marginBottom: 6,
+                  marginBottom: 8,
                 }}
               >
                 <Text style={sectionTitle}>Sparepart</Text>
@@ -650,46 +718,32 @@ export default function TransactionForm() {
                 )}
               </Card>
             </View>
+          )}
 
-          {/* Status (service only; retail auto-paid) */}
+          {/* Status (service only; retail auto-paid) - locked to pending for service */}
           {!isRetail && (
-            <>
-              <Picker
-                label="Status Pembayaran"
-                value={status}
-                options={TRANSACTION_STATUS as unknown as string[]}
-                onChange={(v) => setStatus(v as TransactionStatus)}
-                optionLabels={{
-                  pending: 'Pending',
-                  paid: 'Lunas',
-                  cancelled: 'Batal',
-                }}
-                optionIcons={{
-                  pending: 'time',
-                  paid: 'checkmark-circle',
-                  cancelled: 'close-circle',
-                }}
-                optionColors={{
-                  pending: theme.colors.warning,
-                  paid: theme.colors.success,
-                  cancelled: theme.colors.danger,
-                }}
-              />
-              {status === 'paid' && (
-                <Picker
-                  label="Metode Pembayaran"
-                  value={paymentMethod}
-                  options={PAYMENT_METHODS}
-                  onChange={(v) => setPaymentMethod(v as PaymentMethod)}
-                  optionIcons={{
-                    Tunai: 'cash',
-                    Transfer: 'swap-horizontal',
-                    QRIS: 'qr-code',
-                    Debit: 'card',
-                  }}
-                />
-              )}
-            </>
+            <View>
+              <Text style={sectionTitle}>Status Pembayaran</Text>
+              <View style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                padding: 14,
+                borderRadius: theme.radius.lg,
+                backgroundColor: theme.colors.cardLight,
+                borderWidth: 1,
+                borderColor: theme.colors.border,
+              }}>
+                <Ionicons name="time" size={20} color={theme.colors.warning} />
+                <Text style={{
+                  color: theme.colors.warning,
+                  fontWeight: '700',
+                  fontSize: 15,
+                  marginLeft: 12,
+                }}>
+                  Pending
+                </Text>
+              </View>
+            </View>
           )}
 
           {/* Retail: always show payment method; Bayar only for Tunai */}
@@ -776,7 +830,6 @@ export default function TransactionForm() {
               <Ionicons
                 name={isRetail ? 'print' : 'save'}
                 size={20}
-                color="#fff"
               />
             }
           />
@@ -935,7 +988,7 @@ export default function TransactionForm() {
               keyboardType="numeric"
               placeholder="0"
             />
-            <Button title="Tambahkan" onPress={addCustomService} fullWidth />
+            <Button title="Tambahkan" onPress={addCustomService} fullWidth variant="primary" />
           </ScrollView>
         </View>
       </Modal>
@@ -1250,19 +1303,3 @@ export default function TransactionForm() {
     </View>
   );
 }
-
-const sectionTitle = {
-  color: theme.colors.text,
-  fontSize: 14,
-  fontWeight: '700' as const,
-  marginBottom: 6,
-};
-
-const qtyBtn = {
-  width: 40,
-  height: 40,
-  borderRadius: 12,
-  backgroundColor: theme.colors.primary,
-  alignItems: 'center' as const,
-  justifyContent: 'center' as const,
-};

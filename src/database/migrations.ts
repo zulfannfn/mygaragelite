@@ -128,4 +128,6 @@ export async function runMigrations(db: SQLite.SQLiteDatabase): Promise<void> {
   await addColumnIfMissing(db, 'transactions', 'type', "TEXT DEFAULT 'service'");
   await addColumnIfMissing(db, 'transactions', 'paid_amount', 'REAL DEFAULT 0');
   await addColumnIfMissing(db, 'transactions', 'change_amount', 'REAL DEFAULT 0');
+  await addColumnIfMissing(db, 'transactions', 'cashier_id', 'TEXT');
+  await addColumnIfMissing(db, 'transactions', 'cashier_name', "TEXT DEFAULT ''");
 }

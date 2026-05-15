@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
-import { Modal, Pressable, ScrollView, Text, View } from 'react-native';
+import { Modal, Platform, Pressable, ScrollView, Text, View } from 'react-native';
 import { AddServiceSheet } from '../src/components/ui/AddServiceSheet';
 import { AddSparepartSheet } from '../src/components/ui/AddSparepartSheet';
 import { Badge } from '../src/components/ui/Badge';
@@ -11,7 +11,7 @@ import { ConfirmDialog } from '../src/components/ui/ConfirmDialog';
 import { Input } from '../src/components/ui/Input';
 import { ScreenHeader } from '../src/components/ui/ScreenHeader';
 import { WhatsAppTemplateModal } from '../src/components/ui/WhatsAppTemplateModal';
-import { theme } from '../src/constants/theme';
+import { useTheme } from '../src/contexts/ThemeContext';
 import { receiptService } from '../src/services/receiptService';
 import { transactionService } from '../src/services/transactionService';
 import { useAppStore } from '../src/store/useAppStore';
@@ -24,9 +24,11 @@ export default function TransactionDetail() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const showToast = useAppStore((s) => s.showToast);
+  const { theme } = useTheme();
   const { updateStatus, remove, load: reloadList } = useTransactionStore();
   const [tx, setTx] = useState<Transaction | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [confirmCancel, setConfirmCancel] = useState(false);
   const [actionBusy, setActionBusy] = useState<'print' | 'wa' | null>(null);
   const [waModalOpen, setWaModalOpen] = useState(false);
   const [addServiceOpen, setAddServiceOpen] = useState(false);
@@ -36,9 +38,22 @@ export default function TransactionDetail() {
   >(null);
   const [editMechanicNotes, setEditMechanicNotes] = useState(false);
   const [editRecommendation, setEditRecommendation] = useState(false);
+  const [editComplaint, setEditComplaint] = useState(false);
   const [tempMechanicNotes, setTempMechanicNotes] = useState('');
   const [tempRecommendation, setTempRecommendation] = useState('');
+  const [tempComplaint, setTempComplaint] = useState('');
   const [paymentPickerOpen, setPaymentPickerOpen] = useState(false);
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<string | null>(null);
+  const [confirmPaidModal, setConfirmPaidModal] = useState(false);
+  const [receiptPickerOpen, setReceiptPickerOpen] = useState(false);
+  const [selectedReceiptType, setSelectedReceiptType] = useState<'diterima' | 'tagihan'>('tagihan');
+
+  const sectionLabel = {
+    color: theme.colors.textSecondary,
+    fontSize: 11,
+    fontWeight: '700' as const,
+    letterSpacing: 0.5,
+  };
 
   const reloadTx = useCallback(async () => {
     if (!id) return;
@@ -52,12 +67,25 @@ export default function TransactionDetail() {
 
   const markPaid = async (method: string) => {
     if (!id) return;
-    await updateStatus(id, 'paid', method as any);
-    setTx((p) => (p ? { ...p, status: 'paid', payment_method: method as any } : p));
+    setSelectedPaymentMethod(method);
+    setConfirmPaidModal(true);
+  };
+
+  const confirmMarkPaid = async () => {
+    if (!id || !selectedPaymentMethod) return;
+    setConfirmPaidModal(false);
+    await updateStatus(id, 'paid', selectedPaymentMethod as any);
+    setTx((p) => (p ? { ...p, status: 'paid', payment_method: selectedPaymentMethod as any } : p));
+    setSelectedPaymentMethod(null);
     showToast('Status diperbarui', 'success');
   };
 
   const cancel = async () => {
+    setConfirmCancel(true);
+  };
+
+  const handleConfirmCancel = async () => {
+    setConfirmCancel(false);
     if (!id) return;
     await updateStatus(id, 'cancelled', null);
     setTx((p) => (p ? { ...p, status: 'cancelled' } : p));
@@ -168,6 +196,18 @@ export default function TransactionDetail() {
     }
   };
 
+  const saveComplaint = async () => {
+    if (!tx) return;
+    try {
+      await transactionService.updateMeta(tx.id, { complaint: tempComplaint });
+      await reloadTx();
+      setEditComplaint(false);
+      showToast('Keluhan disimpan', 'success');
+    } catch (e: any) {
+      showToast('Gagal: ' + (e?.message ?? ''), 'error');
+    }
+  };
+
   const startEditMechanicNotes = () => {
     setTempMechanicNotes(tx?.mechanic_notes ?? '');
     setEditMechanicNotes(true);
@@ -176,6 +216,11 @@ export default function TransactionDetail() {
   const startEditRecommendation = () => {
     setTempRecommendation(tx?.recommendation ?? '');
     setEditRecommendation(true);
+  };
+
+  const startEditComplaint = () => {
+    setTempComplaint(tx?.complaint ?? '');
+    setEditComplaint(true);
   };
 
   if (!tx) {
@@ -192,7 +237,7 @@ export default function TransactionDetail() {
   return (
     <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
       <ScreenHeader title="Detail Transaksi" showBack />
-      <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
+      <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 + (Platform.OS === 'android' ? 48 : 34) }}>
         {/* Header card */}
         <Card style={{ marginBottom: 12, backgroundColor: theme.colors.primary }}>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -228,34 +273,90 @@ export default function TransactionDetail() {
               </Text>
             </View>
           ) : null}
+          {tx.cashier_name ? (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8 }}>
+              <Ionicons name="person" size={14} color={theme.colors.success} />
+              <Text style={{ color: theme.colors.textSecondary, fontSize: 12 }}>
+                Kasir: <Text style={{ color: theme.colors.text, fontWeight: '700' }}>{tx.cashier_name}</Text>
+              </Text>
+            </View>
+          ) : null}
         </Card>
 
-        {tx.complaint && tx.status !== 'pending' && tx.type !== 'retail' ? (
-          <Card style={{ marginBottom: 12 }}>
-            <Text style={sectionLabel}>KELUHAN PELANGGAN</Text>
-            <Text style={{ color: theme.colors.text, marginTop: 4, lineHeight: 20 }}>
-              {tx.complaint}
-            </Text>
-          </Card>
-        ) : null}
-        {tx.status === 'pending' && tx.type !== 'retail' && (
-          <Card style={{ marginBottom: 12 }}>
-            <Text style={sectionLabel}>KELUHAN PELANGGAN</Text>
-            <Input
-              value={tx.complaint ?? ''}
-              onChangeText={async (v) => {
-                if (!tx) return;
-                try {
-                  await transactionService.updateMeta(tx.id, { complaint: v });
-                  setTx((p) => (p ? { ...p, complaint: v } : p));
-                } catch {}
-              }}
-              placeholder="Masukkan keluhan pelanggan..."
-              multiline
-              numberOfLines={3}
-              style={{ minHeight: 70, textAlignVertical: 'top' }}
-            />
-          </Card>
+        {tx.type !== 'retail' && (
+          <>
+            {tx.complaint ? (
+              editComplaint ? (
+                <Card style={{ marginBottom: 12 }}>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                    <Text style={sectionLabel}>KELUHAN PELANGGAN</Text>
+                    <Pressable onPress={() => setEditComplaint(false)} hitSlop={8}>
+                      <Ionicons name="close" size={20} color={theme.colors.textSecondary} />
+                    </Pressable>
+                  </View>
+                  <Input
+                    value={tempComplaint}
+                    onChangeText={setTempComplaint}
+                    placeholder="Keluhan pelanggan..."
+                    multiline
+                    numberOfLines={3}
+                    style={{ minHeight: 80 }}
+                  />
+                  <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
+                    <Button
+                      title="Simpan"
+                      size="sm"
+                      onPress={saveComplaint}
+                      style={{ flex: 1 }}
+                    />
+                    <Button
+                      title="Batal"
+                      variant="ghost"
+                      size="sm"
+                      onPress={() => setEditComplaint(false)}
+                      style={{ flex: 1 }}
+                    />
+                  </View>
+                </Card>
+              ) : (
+                <Card style={{ marginBottom: 12 }}>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                    <Text style={sectionLabel}>KELUHAN PELANGGAN</Text>
+                    {tx.status === 'pending' && (
+                      <Pressable onPress={startEditComplaint} hitSlop={8}>
+                        <Ionicons name="create" size={16} color={theme.colors.accent} />
+                      </Pressable>
+                    )}
+                  </View>
+                  <Text style={{ color: theme.colors.text, marginTop: 4, lineHeight: 20 }}>
+                    {tx.complaint}
+                  </Text>
+                </Card>
+              )
+            ) : (
+              tx.status === 'pending' && (
+                <Card style={{ marginBottom: 12 }}>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                    <Text style={sectionLabel}>KELUHAN PELANGGAN</Text>
+                  </View>
+                  <Input
+                    value={tempComplaint}
+                    onChangeText={setTempComplaint}
+                    placeholder="Tambahkan keluhan pelanggan..."
+                    multiline
+                    numberOfLines={3}
+                    style={{ minHeight: 80 }}
+                  />
+                  <Button
+                    title="Simpan Keluhan"
+                    size="sm"
+                    onPress={saveComplaint}
+                    style={{ marginTop: 8 }}
+                  />
+                </Card>
+              )
+            )}
+          </>
         )}
 
         {/* Services */}
@@ -573,9 +674,11 @@ export default function TransactionDetail() {
                 <Card style={{ marginBottom: 12 }}>
                   <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
                     <Text style={sectionLabel}>REKOMENDASI SERVIS BERIKUTNYA</Text>
-                    <Pressable onPress={startEditRecommendation} hitSlop={8}>
-                      <Ionicons name="create" size={16} color={theme.colors.accent} />
-                    </Pressable>
+                    {tx.status !== 'paid' && (
+                      <Pressable onPress={startEditRecommendation} hitSlop={8}>
+                        <Ionicons name="create" size={16} color={theme.colors.accent} />
+                      </Pressable>
+                    )}
                   </View>
                   <Text style={{ color: theme.colors.text, marginTop: 4, lineHeight: 20 }}>
                     {tx.recommendation}
@@ -643,9 +746,11 @@ export default function TransactionDetail() {
                 <Card style={{ marginBottom: 12 }}>
                   <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
                     <Text style={sectionLabel}>CATATAN INTERNAL MEKANIK</Text>
-                    <Pressable onPress={startEditMechanicNotes} hitSlop={8}>
-                      <Ionicons name="create" size={16} color={theme.colors.accent} />
-                    </Pressable>
+                    {tx.status !== 'paid' && (
+                      <Pressable onPress={startEditMechanicNotes} hitSlop={8}>
+                        <Ionicons name="create" size={16} color={theme.colors.accent} />
+                      </Pressable>
+                    )}
                   </View>
                   <Text style={{ color: theme.colors.text, marginTop: 4 }}>{tx.mechanic_notes}</Text>
                 </Card>
@@ -728,7 +833,7 @@ export default function TransactionDetail() {
             title="Cetak PDF"
             variant="secondary"
             size="lg"
-            onPress={() => router.push(`/receipt?id=${tx.id}` as any)}
+            onPress={() => setReceiptPickerOpen(true)}
             icon={<Ionicons name="print" size={18} color="#fff" />}
             style={{ flex: 1 }}
           />
@@ -746,14 +851,21 @@ export default function TransactionDetail() {
             />
           )}
           {tx.status !== 'cancelled' && (
-            <Button title="Batalkan" variant="outline" onPress={cancel} fullWidth />
+            <Button
+              title="Hapus"
+              variant="danger"
+              onPress={() => setConfirmDelete(true)}
+              fullWidth
+            />
           )}
-          <Button
-            title="Hapus Transaksi"
-            variant="danger"
-            onPress={() => setConfirmDelete(true)}
-            fullWidth
-          />
+          {tx.status === 'cancelled' && (
+            <Button
+              title="Hapus Transaksi"
+              variant="danger"
+              onPress={() => setConfirmDelete(true)}
+              fullWidth
+            />
+          )}
         </View>
       </ScrollView>
 
@@ -765,6 +877,15 @@ export default function TransactionDetail() {
         destructive
         onConfirm={handleDelete}
         onCancel={() => setConfirmDelete(false)}
+      />
+
+      <ConfirmDialog
+        visible={confirmCancel}
+        title="Batalkan Transaksi?"
+        message="Transaksi akan ditandai sebagai dibatalkan."
+        confirmText="Batalkan"
+        onConfirm={handleConfirmCancel}
+        onCancel={() => setConfirmCancel(false)}
       />
 
       <ConfirmDialog
@@ -798,6 +919,185 @@ export default function TransactionDetail() {
         onClose={() => setWaModalOpen(false)}
         onError={(msg) => showToast(msg, 'error')}
       />
+
+      {/* Receipt Type Picker Modal */}
+      <Modal
+        visible={receiptPickerOpen}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setReceiptPickerOpen(false)}
+      >
+        <Pressable
+          onPress={() => setReceiptPickerOpen(false)}
+          style={{
+            flex: 1,
+            backgroundColor: 'rgba(0,0,0,0.6)',
+            justifyContent: 'flex-end',
+          }}
+        >
+          <Pressable
+            onPress={(e) => e.stopPropagation()}
+            style={{
+              backgroundColor: theme.colors.surface,
+              borderTopLeftRadius: theme.radius.xl,
+              borderTopRightRadius: theme.radius.xl,
+              paddingTop: 8,
+              paddingBottom: 24,
+              maxHeight: '80%',
+            }}
+          >
+            <View
+              style={{
+                width: 40,
+                height: 4,
+                borderRadius: 2,
+                backgroundColor: theme.colors.borderLight,
+                alignSelf: 'center',
+                marginBottom: 12,
+              }}
+            />
+            <View style={{ paddingHorizontal: 20, paddingBottom: 12 }}>
+              <Text
+                style={{
+                  color: theme.colors.text,
+                  fontSize: 18,
+                  fontWeight: '800',
+                }}
+              >
+                Pilih Jenis Struk
+              </Text>
+            </View>
+            <View style={{ paddingHorizontal: 16, paddingBottom: 4, gap: 8 }}>
+              {tx.status === 'pending' ? (
+                <>
+                  <Card
+                    onPress={() => {
+                      setSelectedReceiptType('diterima');
+                      setReceiptPickerOpen(false);
+                      router.push(`/receipt?id=${tx.id}&type=diterima` as any);
+                    }}
+                    style={{
+                      borderColor: selectedReceiptType === 'diterima' ? theme.colors.accent + '40' : theme.colors.border,
+                      borderWidth: selectedReceiptType === 'diterima' ? 1.5 : 1,
+                    }}
+                    padding="sm"
+                  >
+                    <View style={{ flexDirection: 'row', alignItems: 'center', width: '100%' }}>
+                      <View
+                        style={{
+                          width: 40,
+                          height: 40,
+                          borderRadius: 10,
+                          backgroundColor: theme.colors.accent + '18',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          marginRight: 12,
+                        }}
+                      >
+                        <Ionicons name="receipt" size={18} color={theme.colors.accent} />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text
+                          style={{
+                            color: theme.colors.text,
+                            fontSize: 15,
+                            fontWeight: selectedReceiptType === 'diterima' ? '700' : '500',
+                          }}
+                        >
+                          Service Diterima
+                        </Text>
+                        <Text style={{ color: theme.colors.textMuted, fontSize: 11, marginTop: 2 }}>
+                          Service sudah dibuat dan akan segera diselesaikan
+                        </Text>
+                      </View>
+                    </View>
+                  </Card>
+                  <Card
+                    onPress={() => {
+                      setSelectedReceiptType('tagihan');
+                      setReceiptPickerOpen(false);
+                      router.push(`/receipt?id=${tx.id}&type=tagihan` as any);
+                    }}
+                    style={{
+                      borderColor: selectedReceiptType === 'tagihan' ? theme.colors.accent + '40' : theme.colors.border,
+                      borderWidth: selectedReceiptType === 'tagihan' ? 1.5 : 1,
+                    }}
+                    padding="sm"
+                  >
+                    <View style={{ flexDirection: 'row', alignItems: 'center', width: '100%' }}>
+                      <View
+                        style={{
+                          width: 40,
+                          height: 40,
+                          borderRadius: 10,
+                          backgroundColor: theme.colors.success + '18',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          marginRight: 12,
+                        }}
+                      >
+                        <Ionicons name="cash" size={18} color={theme.colors.success} />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text
+                          style={{
+                            color: theme.colors.text,
+                            fontSize: 15,
+                            fontWeight: selectedReceiptType === 'tagihan' ? '700' : '500',
+                          }}
+                        >
+                          Tagihan
+                        </Text>
+                        <Text style={{ color: theme.colors.textMuted, fontSize: 11, marginTop: 2 }}>
+                          Tagihan service selesai
+                        </Text>
+                      </View>
+                    </View>
+                  </Card>
+                </>
+              ) : (
+                <Card
+                  onPress={() => {
+                    setReceiptPickerOpen(false);
+                    router.push(`/receipt?id=${tx.id}&type=tagihan` as any);
+                  }}
+                  padding="sm"
+                >
+                  <View style={{ flexDirection: 'row', alignItems: 'center', width: '100%' }}>
+                    <View
+                      style={{
+                        width: 40,
+                        height: 40,
+                        borderRadius: 10,
+                        backgroundColor: theme.colors.success + '18',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        marginRight: 12,
+                      }}
+                    >
+                      <Ionicons name="checkmark-circle" size={18} color={theme.colors.success} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text
+                        style={{
+                          color: theme.colors.text,
+                          fontSize: 15,
+                          fontWeight: '700',
+                        }}
+                      >
+                        Selesai + Lunas
+                      </Text>
+                      <Text style={{ color: theme.colors.textMuted, fontSize: 11, marginTop: 2 }}>
+                        Transaksi selesai dan sudah dibayar
+                      </Text>
+                    </View>
+                  </View>
+                </Card>
+              )}
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
 
       {/* Payment Method Picker */}
       <Modal
@@ -912,13 +1212,129 @@ export default function TransactionDetail() {
           </Pressable>
         </Pressable>
       </Modal>
+
+      {/* Confirm Mark Paid Modal */}
+      <Modal
+        visible={confirmPaidModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setConfirmPaidModal(false)}
+      >
+        <View
+          style={{
+            flex: 1,
+            backgroundColor: 'rgba(0,0,0,0.7)',
+            justifyContent: 'center',
+            padding: 24,
+          }}
+        >
+          <View
+            style={{
+              backgroundColor: theme.colors.card,
+              borderRadius: theme.radius.xl,
+              padding: 20,
+              borderWidth: 1,
+              borderColor: theme.colors.border,
+              maxHeight: '85%',
+            }}
+          >
+            <Text style={{ color: theme.colors.text, fontSize: 16, fontWeight: '700', marginBottom: 12, textAlign: 'center' }}>
+              Validasi Pembayaran
+            </Text>
+
+            <ScrollView style={{ maxHeight: 320 }} showsVerticalScrollIndicator={false}>
+              {/* Items */}
+              <Text style={{ color: theme.colors.textSecondary, fontSize: 12, fontWeight: '600', marginBottom: 6 }}>Rincian Transaksi</Text>
+              <View style={{ gap: 0, marginBottom: 12 }}>
+                {tx.service_items && tx.service_items.length > 0 && tx.service_items.map((s, i) => (
+                  <View
+                    key={s.id}
+                    style={{
+                      flexDirection: 'row',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      paddingVertical: 8,
+                      borderBottomWidth: i === tx.service_items!.length - 1 ? 0 : 1,
+                      borderBottomColor: theme.colors.divider,
+                    }}
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ color: theme.colors.text, fontSize: 13, fontWeight: '500' }} numberOfLines={1}>
+                        {s.service_name}
+                      </Text>
+                    </View>
+                    <Text style={{ color: theme.colors.text, fontSize: 13, fontWeight: '700' }}>
+                      {formatCurrency(s.price)}
+                    </Text>
+                  </View>
+                ))}
+                {tx.spareparts && tx.spareparts.length > 0 && tx.spareparts.map((p, i) => (
+                  <View
+                    key={p.id}
+                    style={{
+                      flexDirection: 'row',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      paddingVertical: 8,
+                      borderBottomWidth: i === tx.spareparts!.length - 1 ? 0 : 1,
+                      borderBottomColor: theme.colors.divider,
+                    }}
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ color: theme.colors.text, fontSize: 13, fontWeight: '500' }} numberOfLines={1}>
+                        {p.sparepart_name}
+                      </Text>
+                      <Text style={{ color: theme.colors.textMuted, fontSize: 11 }}>
+                        {formatCurrency(p.sell_price)} × {p.quantity}
+                      </Text>
+                    </View>
+                    <Text style={{ color: theme.colors.text, fontSize: 13, fontWeight: '700' }}>
+                      {formatCurrency(p.sell_price * p.quantity)}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+
+              {/* Totals */}
+              <View
+                style={{
+                  backgroundColor: theme.colors.cardLight,
+                  borderRadius: theme.radius.lg,
+                  padding: 14,
+                  gap: 8,
+                }}
+              >
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                  <Text style={{ color: theme.colors.textSecondary, fontSize: 13 }}>Total</Text>
+                  <Text style={{ color: theme.colors.text, fontSize: 14, fontWeight: '700' }}>
+                    {formatCurrency(tx.total_amount)}
+                  </Text>
+                </View>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                  <Text style={{ color: theme.colors.textSecondary, fontSize: 13 }}>Metode</Text>
+                  <Text style={{ color: theme.colors.text, fontSize: 14, fontWeight: '700' }}>
+                    {selectedPaymentMethod}
+                  </Text>
+                </View>
+              </View>
+            </ScrollView>
+
+            <View style={{ flexDirection: 'row', gap: 10, marginTop: 16 }}>
+              <Button
+                title="Batal"
+                variant="secondary"
+                fullWidth
+                onPress={() => setConfirmPaidModal(false)}
+              />
+              <Button
+                title="Lanjut"
+                fullWidth
+                onPress={confirmMarkPaid}
+              />
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
-
-const sectionLabel = {
-  color: theme.colors.textSecondary,
-  fontSize: 11,
-  fontWeight: '700' as const,
-  letterSpacing: 0.5,
-};

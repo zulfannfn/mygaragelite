@@ -6,11 +6,12 @@ import { Badge } from '../src/components/ui/Badge';
 import { Card } from '../src/components/ui/Card';
 import { EmptyState } from '../src/components/ui/EmptyState';
 import { ScreenHeader } from '../src/components/ui/ScreenHeader';
-import { theme } from '../src/constants/theme';
+import { useTheme } from '../src/contexts/ThemeContext';
 import { useEmployeeStore } from '../src/store/useEmployeeStore';
 
 export default function EmployeesScreen() {
   const router = useRouter();
+  const { theme } = useTheme();
   const { employees, load } = useEmployeeStore();
 
   useFocusEffect(
