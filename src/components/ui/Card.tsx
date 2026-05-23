@@ -37,7 +37,7 @@ export function Card({
     borderRadius: theme.radius.xl,
     padding: pad,
     borderWidth: 1,
-    borderColor: variant === 'outline' ? theme.colors.borderLight : theme.colors.border,
+    borderColor: theme.colors.borderLight,
     ...(accent
       ? {
           borderLeftWidth: 4,
@@ -47,10 +47,10 @@ export function Card({
     ...(elevated && variant !== 'outline'
       ? {
           shadowColor: '#000',
-          shadowOffset: { width: 0, height: 2 },
-          shadowOpacity: 0.25,
-          shadowRadius: 6,
-          elevation: 2,
+          shadowOffset: { width: 0, height: 3 },
+          shadowOpacity: 0.3,
+          shadowRadius: 8,
+          elevation: 4,
         }
       : null),
   };

@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
 import { Modal, Platform, Pressable, ScrollView, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AddServiceSheet } from '../src/components/ui/AddServiceSheet';
 import { AddSparepartSheet } from '../src/components/ui/AddSparepartSheet';
 import { Badge } from '../src/components/ui/Badge';
@@ -22,6 +23,7 @@ import { formatDateTime } from '../src/utils/date';
 
 export default function TransactionDetail() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
   const showToast = useAppStore((s) => s.showToast);
   const { theme } = useTheme();
@@ -830,7 +832,7 @@ export default function TransactionDetail() {
             style={{ flex: 1 }}
           />
           <Button
-            title="Cetak PDF"
+            title="Cetak"
             variant="secondary"
             size="lg"
             onPress={() => setReceiptPickerOpen(true)}
@@ -942,7 +944,7 @@ export default function TransactionDetail() {
               borderTopLeftRadius: theme.radius.xl,
               borderTopRightRadius: theme.radius.xl,
               paddingTop: 8,
-              paddingBottom: 24,
+              paddingBottom: Math.max(24, insets.bottom + 16),
               maxHeight: '80%',
             }}
           >
@@ -1121,7 +1123,7 @@ export default function TransactionDetail() {
               borderTopLeftRadius: theme.radius.xl,
               borderTopRightRadius: theme.radius.xl,
               paddingTop: 8,
-              paddingBottom: 28,
+              paddingBottom: Math.max(28, insets.bottom + 16),
               maxHeight: '60%',
             }}
           >

@@ -61,9 +61,9 @@ export function Toast() {
           flexDirection: 'row',
           alignItems: 'center',
           gap: 10,
-          shadowColor: '#000',
+          shadowColor: '#c71818',
           shadowOpacity: 0.5,
-          shadowRadius: 12,
+          shadowRadius: 12,   
           shadowOffset: { width: 0, height: 4 },
           elevation: 8,
         }}

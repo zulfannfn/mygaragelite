@@ -1,12 +1,14 @@
 import { Ionicons } from '@expo/vector-icons';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { FlatList, Modal, Pressable, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../contexts/ThemeContext';
 import { sparepartService } from '../../services/sparepartService';
 import { Sparepart } from '../../types';
 import { formatCurrency } from '../../utils/currency';
 import { Button } from './Button';
 import { EmptyState } from './EmptyState';
+import { Input } from './Input';
 import { SearchBar } from './SearchBar';
 
 interface Props {
@@ -19,12 +21,19 @@ const PAGE_SIZE = 20;
 
 export function AddSparepartSheet({ visible, onClose, onPick }: Props) {
   const { theme } = useTheme();
+  const insets = useSafeAreaInsets();
   const [items, setItems] = useState<Sparepart[]>([]);
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<Sparepart | null>(null);
   const [qty, setQty] = useState(1);
   const [loading, setLoading] = useState(false);
   const [hasMore, setHasMore] = useState(true);
+
+  // Custom Form states
+  const [showCustomForm, setShowCustomForm] = useState(false);
+  const [customName, setCustomName] = useState('');
+  const [customPrice, setCustomPrice] = useState('');
+  const [customStock, setCustomStock] = useState('1');
 
   const loadSpareparts = useCallback(async (offset = 0) => {
     if (offset === 0) {
@@ -78,6 +87,30 @@ export function AddSparepartSheet({ visible, onClose, onPick }: Props) {
     onPick(selected, Math.max(1, qty));
     setSelected(null);
     setQty(1);
+    setSearch('');
+  };
+
+  const submitCustom = async () => {
+    if (!customName.trim()) return;
+    try {
+      const stockVal = Math.max(0, parseInt(customStock) || 0);
+      const newSp = await sparepartService.create({
+        name: customName.trim(),
+        category: 'Umum',
+        buy_price: 0,
+        sell_price: Number(customPrice.replace(/[^0-9]/g, '')) || 0,
+        stock: stockVal,
+      });
+      // Simulate selection to add right away
+      onPick(newSp, 1);
+      setShowCustomForm(false);
+      setCustomName('');
+      setCustomPrice('');
+      setCustomStock('1');
+      setSearch('');
+    } catch (e) {
+      console.error('Error create custom sparepart', e);
+    }
   };
 
   return (
@@ -97,7 +130,7 @@ export function AddSparepartSheet({ visible, onClose, onPick }: Props) {
             borderTopLeftRadius: theme.radius.xl,
             borderTopRightRadius: theme.radius.xl,
             paddingTop: 8,
-            paddingBottom: 28,
+            paddingBottom: Math.max(28, insets.bottom + 16),
             height: '85%',
           }}
         >
@@ -120,7 +153,82 @@ export function AddSparepartSheet({ visible, onClose, onPick }: Props) {
 
           {!selected ? (
             <>
-              <SearchBar value={search} onChangeText={setSearch} placeholder="Cari sparepart..." />
+              <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center', paddingHorizontal: 16, marginBottom: 12 }}>
+                <View style={{ flex: 1 }}>
+                  <SearchBar 
+                    value={search} 
+                    onChangeText={setSearch} 
+                    placeholder="Cari sparepart..." 
+                    containerStyle={{ marginHorizontal: 0, marginBottom: 0 }} 
+                  />
+                </View>
+                <Pressable
+                  onPress={() => setShowCustomForm(!showCustomForm)}
+                  style={({ pressed }) => ({
+                    width: 48,
+                    height: 48,
+                    borderRadius: theme.radius.md,
+                    backgroundColor: showCustomForm ? theme.colors.accent : theme.colors.card,
+                    borderWidth: 1,
+                    borderColor: showCustomForm ? theme.colors.accent : theme.colors.border,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    opacity: pressed ? 0.7 : 1,
+                  })}
+                >
+                  <Ionicons
+                    name="add"
+                    size={20}
+                    color={showCustomForm ? '#fff' : theme.colors.textSecondary}
+                  />
+                </Pressable>
+              </View>
+
+              {showCustomForm && (
+                <View
+                  style={{
+                    padding: 14,
+                    backgroundColor: theme.colors.card,
+                    borderRadius: theme.radius.lg,
+                    borderWidth: 1,
+                    borderColor: theme.colors.border,
+                    marginHorizontal: 16,
+                    marginBottom: 12,
+                  }}
+                >
+                  <Input
+                    value={customName}
+                    onChangeText={setCustomName}
+                    placeholder="Nama Sparepart"
+                  />
+                  <View style={{ flexDirection: 'row', gap: 12 }}>
+                    <View style={{ flex: 1 }}>
+                      <Input
+                        value={customPrice}
+                        onChangeText={setCustomPrice}
+                        placeholder="Harga (Rp)"
+                        keyboardType="numeric"
+                      />
+                    </View>
+                    <View style={{ width: 80 }}>
+                      <Input
+                        value={customStock}
+                        onChangeText={setCustomStock}
+                        placeholder="Stok"
+                        keyboardType="numeric"
+                      />
+                    </View>
+                  </View>
+                  <Button
+                    title="Tambah Sparepart Baru"
+                    fullWidth
+                    onPress={submitCustom}
+                    disabled={!customName.trim()}
+                    icon={<Ionicons name="add-circle" size={18} color="#fff" />}
+                  />
+                </View>
+              )}
+
               <FlatList
                 data={filtered}
                 keyExtractor={(it) => it.id}

@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import React, { useState } from 'react';
 import { Modal, Pressable, ScrollView, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../contexts/ThemeContext';
 import { receiptService } from '../../services/receiptService';
 import { Transaction } from '../../types';
@@ -24,6 +25,7 @@ export function WhatsAppTemplateModal({
   onError,
 }: Props) {
   const { theme } = useTheme();
+  const insets = useSafeAreaInsets();
   const [selected, setSelected] = useState<TemplateKey | null>(null);
   const [busy, setBusy] = useState(false);
   const isRetail = tx?.type === 'retail';
@@ -114,7 +116,7 @@ export function WhatsAppTemplateModal({
             borderTopLeftRadius: theme.radius.xl,
             borderTopRightRadius: theme.radius.xl,
             paddingTop: 8,
-            paddingBottom: 28,
+            paddingBottom: Math.max(28, insets.bottom + 16),
             maxHeight: '90%',
           }}
         >

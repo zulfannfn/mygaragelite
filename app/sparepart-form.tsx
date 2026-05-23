@@ -99,7 +99,7 @@ export default function SparepartForm() {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={{ flex: 1 }}
       >
-        <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 40 + (Platform.OS === 'android' ? 48 : 34) }}>
+        <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 40 + (Platform.OS === 'android' ? 48 : 34), gap: 16 }}>
           <Input
             label="Nama Sparepart *"
             value={name}

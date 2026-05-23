@@ -104,8 +104,8 @@ export const lightTheme = {
     info: '#1E90FF',
 
     // UI
-    border: '#E0E0E8',
-    borderLight: '#E8E8F0',
+    border: '#D8D8E0',
+    borderLight: '#E0E0E8',
     divider: '#E8E8F0',
   },
 

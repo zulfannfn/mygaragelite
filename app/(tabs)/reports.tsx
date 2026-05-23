@@ -289,17 +289,16 @@ export default function ReportsScreen() {
           <Text style={{ color: theme.colors.textSecondary, fontSize: 11, fontWeight: '600' }}>
             HARI INI
           </Text>
-          <View style={{ flexDirection: 'row', marginTop: 6, gap: 6 }}>
-            <View style={{ flex: 1 }}>
-              <Text style={{ color: theme.colors.textMuted, fontSize: 9 }}>Service</Text>
-              <Text style={{ color: theme.colors.accent, fontSize: 13, fontWeight: '700' }}>
+          <View style={{ marginTop: 8, gap: 8 }}>
+            <View>
+              <Text style={{ color: theme.colors.textMuted, fontSize: 10 }}>Service</Text>
+              <Text style={{ color: theme.colors.accent, fontSize: 14, fontWeight: '700' }}>
                 {loading ? '...' : formatCompactCurrency(todayServiceRev)}
               </Text>
             </View>
-            <View style={{ width: 1, backgroundColor: theme.colors.divider }} />
-            <View style={{ flex: 1 }}>
-              <Text style={{ color: theme.colors.textMuted, fontSize: 9 }}>Kasir</Text>
-              <Text style={{ color: theme.colors.success, fontSize: 13, fontWeight: '700' }}>
+            <View>
+              <Text style={{ color: theme.colors.textMuted, fontSize: 10 }}>Kasir</Text>
+              <Text style={{ color: theme.colors.success, fontSize: 14, fontWeight: '700' }}>
                 {loading ? '...' : formatCompactCurrency(todayRetailRev)}
               </Text>
             </View>
@@ -310,17 +309,16 @@ export default function ReportsScreen() {
           <Text style={{ color: theme.colors.textSecondary, fontSize: 11, fontWeight: '600' }}>
             7 HARI
           </Text>
-          <View style={{ flexDirection: 'row', marginTop: 6, gap: 6 }}>
-            <View style={{ flex: 1 }}>
-              <Text style={{ color: theme.colors.textMuted, fontSize: 9 }}>Service</Text>
-              <Text style={{ color: theme.colors.accent, fontSize: 13, fontWeight: '700' }}>
+          <View style={{ marginTop: 8, gap: 8 }}>
+            <View>
+              <Text style={{ color: theme.colors.textMuted, fontSize: 10 }}>Service</Text>
+              <Text style={{ color: theme.colors.accent, fontSize: 14, fontWeight: '700' }}>
                 {loading ? '...' : formatCompactCurrency(totalWeekServiceRev)}
               </Text>
             </View>
-            <View style={{ width: 1, backgroundColor: theme.colors.divider }} />
-            <View style={{ flex: 1 }}>
-              <Text style={{ color: theme.colors.textMuted, fontSize: 9 }}>Kasir</Text>
-              <Text style={{ color: theme.colors.success, fontSize: 13, fontWeight: '700' }}>
+            <View>
+              <Text style={{ color: theme.colors.textMuted, fontSize: 10 }}>Kasir</Text>
+              <Text style={{ color: theme.colors.success, fontSize: 14, fontWeight: '700' }}>
                 {loading ? '...' : formatCompactCurrency(totalWeekRetailRev)}
               </Text>
             </View>
@@ -331,17 +329,16 @@ export default function ReportsScreen() {
           <Text style={{ color: theme.colors.textSecondary, fontSize: 11, fontWeight: '600' }}>
             BULAN INI
           </Text>
-          <View style={{ flexDirection: 'row', marginTop: 6, gap: 6 }}>
-            <View style={{ flex: 1 }}>
-              <Text style={{ color: theme.colors.textMuted, fontSize: 9 }}>Service</Text>
-              <Text style={{ color: theme.colors.accent, fontSize: 13, fontWeight: '700' }}>
+          <View style={{ marginTop: 8, gap: 8 }}>
+            <View>
+              <Text style={{ color: theme.colors.textMuted, fontSize: 10 }}>Service</Text>
+              <Text style={{ color: theme.colors.accent, fontSize: 14, fontWeight: '700' }}>
                 {loading ? '...' : formatCompactCurrency(totalMonthServiceRev)}
               </Text>
             </View>
-            <View style={{ width: 1, backgroundColor: theme.colors.divider }} />
-            <View style={{ flex: 1 }}>
-              <Text style={{ color: theme.colors.textMuted, fontSize: 9 }}>Kasir</Text>
-              <Text style={{ color: theme.colors.success, fontSize: 13, fontWeight: '700' }}>
+            <View>
+              <Text style={{ color: theme.colors.textMuted, fontSize: 10 }}>Kasir</Text>
+              <Text style={{ color: theme.colors.success, fontSize: 14, fontWeight: '700' }}>
                 {loading ? '...' : formatCompactCurrency(totalMonthRetailRev)}
               </Text>
             </View>
@@ -395,7 +392,7 @@ export default function ReportsScreen() {
           {loading ? (
             <Skeleton height={80} />
           ) : (
-            <ScrollView style={{ maxHeight: 200 }} showsVerticalScrollIndicator={false}>
+            <View style={{ gap: 0 }}>
               {monthly.map((m, i) => (
                 <View
                   key={i}
@@ -430,7 +427,7 @@ export default function ReportsScreen() {
                   </View>
                 </View>
               ))}
-            </ScrollView>
+            </View>
           )}
         </Card>
       </View>
@@ -621,7 +618,7 @@ export default function ReportsScreen() {
               Belum ada data
             </Text>
           ) : (
-            <ScrollView style={{ maxHeight: 250 }} showsVerticalScrollIndicator={false}>
+            <ScrollView nestedScrollEnabled={true} style={{ maxHeight: 250 }} showsVerticalScrollIndicator={false}>
               {[...topSvc]
                 .sort((a, b) => (topSvcSort === 'sold' ? b.totalSold - a.totalSold : b.revenue - a.revenue))
                 .map((sv, i) => (
@@ -756,7 +753,7 @@ export default function ReportsScreen() {
               Belum ada data
             </Text>
           ) : (
-            <ScrollView style={{ maxHeight: 250 }} showsVerticalScrollIndicator={false}>
+            <ScrollView nestedScrollEnabled={true} style={{ maxHeight: 250 }} showsVerticalScrollIndicator={false}>
               {[...topSp]
                 .sort((a, b) => (topSpSort === 'sold' ? b.totalSold - a.totalSold : b.revenue - a.revenue))
                 .map((sp, i) => (
@@ -857,7 +854,7 @@ export default function ReportsScreen() {
               Belum ada data
             </Text>
           ) : (
-            <ScrollView style={{ maxHeight: 200 }} showsVerticalScrollIndicator={false}>
+            <ScrollView nestedScrollEnabled={true} style={{ maxHeight: 200 }} showsVerticalScrollIndicator={false}>
               {categoryStats.map((cat, i) => (
                 <View
                   key={i}
@@ -950,7 +947,7 @@ export default function ReportsScreen() {
               Belum ada data
             </Text>
           ) : (
-            <ScrollView style={{ maxHeight: 250 }} showsVerticalScrollIndicator={false}>
+            <ScrollView nestedScrollEnabled={true} style={{ maxHeight: 250 }} showsVerticalScrollIndicator={false}>
               {topMech.map((mech, i) => (
                 <View
                   key={mech.id ?? i}

@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
 import { Pressable, Text, View, ViewStyle } from 'react-native';
-import { theme } from '../../constants/theme';
+import { useTheme } from '../../contexts/ThemeContext';
 
 interface Props {
   label: string;
@@ -28,6 +28,7 @@ export function FilterChip({
   onPress,
   style,
 }: Props) {
+  const { theme } = useTheme();
   const accent = color ?? theme.colors.accent;
   const hasCount = typeof count === 'number';
 

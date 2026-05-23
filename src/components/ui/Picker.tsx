@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import React, { useState } from 'react';
 import { FlatList, Modal, Pressable, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../contexts/ThemeContext';
 import { Card } from './Card';
 
@@ -29,6 +30,7 @@ export function Picker<T extends string>({
   optionColors,
 }: Props<T>) {
   const { theme } = useTheme();
+  const insets = useSafeAreaInsets();
   const [open, setOpen] = useState(false);
 
   const displayLabel = (v: string) => optionLabels?.[v] ?? v;
@@ -134,7 +136,7 @@ export function Picker<T extends string>({
               borderTopLeftRadius: theme.radius.xl,
               borderTopRightRadius: theme.radius.xl,
               paddingTop: 8,
-              paddingBottom: 16,
+              paddingBottom: Math.max(20, insets.bottom + 12),
               maxHeight: '80%',
             }}
           >

@@ -7,7 +7,6 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import 'react-native-reanimated';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
-import '../global.css';
 import { Toast } from '../src/components/ui/Toast';
 import { darkTheme, lightTheme } from '../src/constants/theme';
 import { ThemeProvider } from '../src/contexts/ThemeContext';

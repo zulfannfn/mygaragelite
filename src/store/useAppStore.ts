@@ -25,6 +25,19 @@ interface AppState {
   showToast: (message: string, type?: 'success' | 'error' | 'info') => void;
   hideToast: () => void;
 
+  // Receipt Settings
+  receiptPaperSize: 'A4' | '58mm' | '80mm';
+  receiptFooter: string;
+  setReceiptInfo: (info: Partial<{ paperSize: 'A4' | '58mm' | '80mm'; footer: string }>) => Promise<void>;
+
+  // Bluetooth Printer
+  connectedPrinter: { name: string; mac: string } | null;
+  setConnectedPrinter: (printer: { name: string; mac: string } | null) => Promise<void>;
+
+  // Customer Form Context
+  lastAddedCustomerId: string | null;
+  setLastAddedCustomerId: (id: string | null) => void;
+
   // Init
   loadSettings: () => Promise<void>;
 }
@@ -59,6 +72,34 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
 
+  receiptPaperSize: 'A4',
+  receiptFooter: '',
+  setReceiptInfo: async (info) => {
+    if (info.paperSize !== undefined) {
+      set({ receiptPaperSize: info.paperSize });
+      await settingsService.set('receipt_paper_size', info.paperSize);
+    }
+    if (info.footer !== undefined) {
+      set({ receiptFooter: info.footer });
+      await settingsService.set('receipt_footer', info.footer);
+    }
+  },
+
+  connectedPrinter: null,
+  setConnectedPrinter: async (printer) => {
+    set({ connectedPrinter: printer });
+    if (printer) {
+      await settingsService.set('printer_name', printer.name);
+      await settingsService.set('printer_mac', printer.mac);
+    } else {
+      await settingsService.set('printer_name', '');
+      await settingsService.set('printer_mac', '');
+    }
+  },
+
+  lastAddedCustomerId: null,
+  setLastAddedCustomerId: (id) => set({ lastAddedCustomerId: id }),
+
   isDarkMode: true,
   setDarkMode: async (v) => {
     set({ isDarkMode: v });
@@ -82,6 +123,9 @@ export const useAppStore = create<AppState>((set, get) => ({
       workshopName: all.workshop_name ?? 'MyGarage Bengkel',
       workshopAddress: all.workshop_address ?? '',
       workshopPhone: all.workshop_phone ?? '',
+      receiptPaperSize: (all.receipt_paper_size as 'A4' | '58mm' | '80mm') ?? 'A4',
+      receiptFooter: all.receipt_footer ?? '',
+      connectedPrinter: all.printer_mac ? { name: all.printer_name ?? 'Printer', mac: all.printer_mac } : null,
       onboardingDone: all.onboarding_done === 'true',
       isDarkMode: all.dark_mode !== 'false',
     });

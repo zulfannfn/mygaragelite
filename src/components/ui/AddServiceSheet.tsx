@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { FlatList, Modal, Pressable, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../contexts/ThemeContext';
 import { serviceService } from '../../services/serviceService';
 import { formatCurrency, parseCurrency } from '../../utils/currency';
@@ -17,6 +18,7 @@ const PAGE_SIZE = 20;
 
 export function AddServiceSheet({ visible, onClose, onAdd }: Props) {
   const { theme } = useTheme();
+  const insets = useSafeAreaInsets();
   const [customName, setCustomName] = useState('');
   const [customPrice, setCustomPrice] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
@@ -112,7 +114,7 @@ export function AddServiceSheet({ visible, onClose, onAdd }: Props) {
             borderTopLeftRadius: theme.radius.xl,
             borderTopRightRadius: theme.radius.xl,
             paddingTop: 8,
-            paddingBottom: 28,
+            paddingBottom: Math.max(28, insets.bottom + 16),
             maxHeight: '88%',
           }}
         >
@@ -150,6 +152,7 @@ export function AddServiceSheet({ visible, onClose, onAdd }: Props) {
                   onChangeText={setSearchQuery}
                   placeholder="Cari jasa..."
                   leftIcon={<Ionicons name="search" size={18} color={theme.colors.textSecondary} />}
+                  containerStyle={{ marginBottom: 0 }}
                 />
               </View>
               <Pressable
@@ -206,18 +209,7 @@ export function AddServiceSheet({ visible, onClose, onAdd }: Props) {
               </View>
             )}
 
-            <Text
-              style={{
-                color: theme.colors.textMuted,
-                fontSize: 11,
-                fontWeight: '700',
-                letterSpacing: 1,
-                marginBottom: 8,
-                marginTop: 16,
-              }}
-            >
-              JASA
-            </Text>
+            <View style={{ height: 16 }} />
 
             <FlatList
               data={filteredServices}
@@ -294,9 +286,8 @@ export function AddServiceSheet({ visible, onClose, onAdd }: Props) {
             />
           </View>
 
-          <View style={{ paddingHorizontal: 20, paddingTop: 8 }}>
-            <Button title="Tutup" variant="ghost" fullWidth onPress={close} />
-          </View>
+          {/* padding replacement for removed button */}
+          <View style={{ height: 16 }} />
         </Pressable>
       </Pressable>
     </Modal>

@@ -69,7 +69,8 @@ export default function CustomerForm() {
         await update(id, input);
         showToast('Pelanggan diperbarui', 'success');
       } else {
-        await add(input);
+        const createdCustomer = await add(input);
+        useAppStore.getState().setLastAddedCustomerId(createdCustomer.id);
         showToast('Pelanggan ditambahkan', 'success');
       }
       router.back();
@@ -95,7 +96,7 @@ export default function CustomerForm() {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={{ flex: 1 }}
       >
-        <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 40 }}>
+        <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 40, gap: 16 }}>
           <Input
             label="Nama Pelanggan *"
             value={name}

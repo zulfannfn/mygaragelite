@@ -1,10 +1,13 @@
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, ScrollView, Text, View } from 'react-native';
 import { theme } from '../src/constants/theme';
+import { receiptService } from '../src/services/receiptService';
 import { settingsService } from '../src/services/settingsService';
 import { transactionService } from '../src/services/transactionService';
+import { useAppStore } from '../src/store/useAppStore';
 import { Transaction } from '../src/types';
 import { formatCurrency } from '../src/utils/currency';
 import { formatDateTime } from '../src/utils/date';
@@ -16,11 +19,20 @@ export default function ReceiptPage() {
   const { id, type } = useLocalSearchParams<{ id: string; type?: string }>();
   const [tx, setTx] = useState<Transaction | null>(null);
   const [shop, setShop] = useState({ name: '', address: '', phone: '' });
+  const [printing, setPrinting] = useState(false);
   const receiptType = (type as ReceiptType) || 'tagihan';
+  const connectedPrinter = useAppStore((s) => s.connectedPrinter);
+  const insets = useSafeAreaInsets();
 
   useEffect(() => {
     if (!id) return;
-    transactionService.getById(id).then((data) => setTx(data));
+    transactionService.getById(id).then((data) => {
+       setTx(data);
+       // Auto-print saat halaman struk dibuka
+       if (data && connectedPrinter) {
+         handlePrint(data);
+       }
+    });
     settingsService.getAll().then((s) =>
       setShop({
         name: s.workshop_name ?? 'MyGarage Bengkel',
@@ -30,9 +42,18 @@ export default function ReceiptPage() {
     );
   }, [id]);
 
-  const handlePrint = () => {
-    if (typeof window !== 'undefined') {
-      window.print();
+  const handlePrint = async (targetTx = tx) => {
+    if (!targetTx || printing) return;
+    setPrinting(true);
+    try {
+      await receiptService.printPdf(targetTx, receiptType);
+      if (connectedPrinter) {
+        Alert.alert('Berhasil', 'Struk berhasil dikirim ke printer!');
+      }
+    } catch (e: any) {
+      Alert.alert('Gagal Cetak', e?.message ?? 'Terjadi kesalahan saat mencetak.');
+    } finally {
+      setPrinting(false);
     }
   };
 
@@ -61,33 +82,12 @@ export default function ReceiptPage() {
 
   return (
     <View style={{ flex: 1, backgroundColor: '#f2f2f2' }}>
-      {/* Actions bar */}
-      <View
-        style={{
-          flexDirection: 'row',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          paddingHorizontal: 16,
-          paddingTop: 48,
-          paddingBottom: 12,
-          backgroundColor: '#f2f2f2',
-        }}
-      >
-        <Pressable onPress={handleClose} style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-          <Ionicons name="close" size={22} color={theme.colors.text} />
-          <Text style={{ color: theme.colors.text, fontSize: 15, fontWeight: '600' }}>Tutup</Text>
-        </Pressable>
-        <Pressable onPress={handlePrint} style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-          <Ionicons name="print" size={20} color={theme.colors.accent} />
-          <Text style={{ color: theme.colors.accent, fontSize: 15, fontWeight: '700' }}>Cetak</Text>
-        </Pressable>
-      </View>
-
       <ScrollView
         contentContainerStyle={{
           alignItems: 'center',
           paddingHorizontal: 16,
-          paddingBottom: 40,
+          paddingTop: 48,
+          paddingBottom: 100 + insets.bottom,
         }}
       >
         {/* Receipt Paper */}
@@ -297,6 +297,65 @@ export default function ReceiptPage() {
           </View>
         </View>
       </ScrollView>
+
+      {/* Bottom Action Buttons */}
+      <View
+        style={{
+          position: 'absolute',
+          bottom: 0,
+          left: 0,
+          right: 0,
+          flexDirection: 'row',
+          padding: 16,
+          backgroundColor: '#fff',
+          borderTopWidth: 1,
+          borderTopColor: '#eee',
+          elevation: 10,
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: -2 },
+          shadowOpacity: 0.05,
+          shadowRadius: 4,
+          gap: 12,
+          paddingBottom: Math.max(16, insets.bottom + 8),
+        }}
+      >
+        <Pressable
+          onPress={handleClose}
+          style={{
+            flex: 1,
+            paddingVertical: 14,
+            borderRadius: 8,
+            backgroundColor: '#f5f5f5',
+            alignItems: 'center',
+          }}
+        >
+          <Text style={{ color: '#444', fontSize: 15, fontWeight: '700' }}>Batal</Text>
+        </Pressable>
+        <Pressable
+          onPress={() => handlePrint(tx)}
+          disabled={printing}
+          style={{
+            flex: 1,
+            paddingVertical: 14,
+            borderRadius: 8,
+            backgroundColor: theme.colors.accent,
+            alignItems: 'center',
+            opacity: printing ? 0.7 : 1,
+            flexDirection: 'row',
+            justifyContent: 'center',
+            gap: 8,
+          }}
+        >
+          {printing ? (
+            <ActivityIndicator size="small" color="#fff" />
+          ) : (
+            <Ionicons name="print" size={18} color="#fff" />
+          )}
+          <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>
+            {printing ? 'Mencetak...' : (connectedPrinter ? 'Cetak Ulang' : 'Cetak PDF')}
+          </Text>
+        </Pressable>
+      </View>
     </View>
   );
 }

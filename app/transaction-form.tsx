@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   FlatList,
   KeyboardAvoidingView,
@@ -11,6 +11,7 @@ import {
   Text,
   View
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { InterstitialAd } from '../src/components/ui/AdBanner';
 import { Button } from '../src/components/ui/Button';
 import { Card } from '../src/components/ui/Card';
@@ -53,6 +54,7 @@ interface SparepartLine {
 
 export default function TransactionForm() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{ type?: 'service' | 'retail' }>();
   const { theme } = useTheme();
   const showToast = useAppStore((s) => s.showToast);
@@ -106,12 +108,22 @@ export default function TransactionForm() {
   const [customServicePrice, setCustomServicePrice] = useState('');
   const [dbServices, setDbServices] = useState<{ name: string; price: number }[]>([]);
 
-  useEffect(() => {
-    customerService.getAll().then(setCustomers);
-    sparepartService.getAll().then(setSpareparts);
-    employeeService.getMechanics().then(setMechanics);
-    employeeService.getCashiers().then(setCashiers);
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      customerService.getAll().then((data) => {
+        setCustomers(data);
+        const { lastAddedCustomerId, setLastAddedCustomerId } = useAppStore.getState();
+        if (lastAddedCustomerId) {
+          const newCust = data.find((c) => c.id === lastAddedCustomerId);
+          if (newCust) setSelectedCustomer(newCust);
+          setLastAddedCustomerId(null);
+        }
+      });
+      sparepartService.getAll().then(setSpareparts);
+      employeeService.getMechanics().then(setMechanics);
+      employeeService.getCashiers().then(setCashiers);
+    }, [])
+  );
 
   useEffect(() => {
     if (servicePickerOpen) {
@@ -197,16 +209,15 @@ export default function TransactionForm() {
   };
 
   const updatePartQty = (i: number, delta: number) => {
+    const part = parts[i];
+    if (!part) return;
+    const next = Math.max(1, part.quantity + delta);
+    if (next > (part.max_stock || 0)) {
+      showToast('Stok tidak mencukupi', 'error');
+      return;
+    }
     setParts((prev) =>
-      prev.map((p, idx) => {
-        if (idx !== i) return p;
-        const next = Math.max(1, p.quantity + delta);
-        if (next > (p.max_stock || 0)) {
-          showToast('Stok tidak mencukupi', 'error');
-          return p;
-        }
-        return { ...p, quantity: next };
-      })
+      prev.map((p, idx) => (idx === i ? { ...p, quantity: next } : p))
     );
   };
 
@@ -797,7 +808,7 @@ export default function TransactionForm() {
             bottom: 0,
             backgroundColor: theme.colors.surface,
             padding: 16,
-            paddingBottom: 32,
+            paddingBottom: Math.max(16, insets.bottom + 16),
             borderTopWidth: 1,
             borderTopColor: theme.colors.divider,
           }}
@@ -861,7 +872,7 @@ export default function TransactionForm() {
           <FlatList
             data={filteredCustomers}
             keyExtractor={(c) => c.id}
-            contentContainerStyle={{ padding: 16 }}
+            contentContainerStyle={{ padding: 16, paddingBottom: 16 + insets.bottom }}
             renderItem={({ item }) => (
               <Pressable
                 onPress={() => {
@@ -915,7 +926,7 @@ export default function TransactionForm() {
       >
         <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
           <ScreenHeader title="Pilih Jasa" showBack />
-          <ScrollView contentContainerStyle={{ padding: 16 }}>
+          <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 16 + insets.bottom }}>
             <Text style={sectionTitle}>Jasa</Text>
             {dbServices.length === 0 ? (
               <Text style={{ color: theme.colors.textMuted, padding: 12 }}>
@@ -1005,7 +1016,7 @@ export default function TransactionForm() {
           <FlatList
             data={filteredSpareparts}
             keyExtractor={(s) => s.id}
-            contentContainerStyle={{ padding: 16 }}
+            contentContainerStyle={{ padding: 16, paddingBottom: 16 + insets.bottom }}
             ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
             renderItem={({ item }) => {
               const isOut = item.stock <= 0;
