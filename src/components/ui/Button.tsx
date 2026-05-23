@@ -2,7 +2,7 @@ import React from 'react';
 import { ActivityIndicator, Pressable, Text, View, ViewStyle } from 'react-native';
 import { useTheme } from '../../contexts/ThemeContext';
 
-type Variant = 'primary' | 'secondary' | 'outline' | 'ghost' | 'danger' | 'success';
+type Variant = 'primary' | 'secondary' | 'outline' | 'ghost' | 'danger' | 'success' | 'outline-danger';
 type Size = 'sm' | 'md' | 'lg';
 
 interface Props {
@@ -38,6 +38,7 @@ export function Button({
     ghost: 'transparent',
     danger: theme.colors.danger,
     success: theme.colors.success,
+    'outline-danger': 'transparent',
   };
   const border: Record<Variant, string> = {
     primary: 'transparent',
@@ -46,6 +47,7 @@ export function Button({
     ghost: 'transparent',
     danger: 'transparent',
     success: 'transparent',
+    'outline-danger': theme.colors.danger,
   };
   const fg: Record<Variant, string> = {
     primary: '#fff',
@@ -54,6 +56,7 @@ export function Button({
     ghost: theme.colors.accent,
     danger: '#fff',
     success: '#fff',
+    'outline-danger': theme.colors.danger,
   };
 
   const sizing: Record<Size, { minH: number; h: number; fs: number; gap: number }> = {

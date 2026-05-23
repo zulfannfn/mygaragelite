@@ -245,6 +245,7 @@ export default function SettingsScreen() {
                 await setReceiptInfo({ paperSize, footer: footer.trim() });
                 showToast('Pengaturan struk disimpan', 'success');
               }}
+              disabled={paperSize === receiptPaperSize && footer === receiptFooter}
               fullWidth
             />
           </View>

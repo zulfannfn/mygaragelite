@@ -9,7 +9,8 @@ import {
   Pressable,
   ScrollView,
   Text,
-  View
+  View,
+  Alert
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { InterstitialAd } from '../src/components/ui/AdBanner';
@@ -243,7 +244,7 @@ export default function TransactionForm() {
     if (isRetail && paymentMethod === 'Tunai') {
       const paid = parseCurrency(paidAmount);
       if (paid < grandTotal) {
-        showToast('Jumlah bayar kurang dari total', 'error');
+        Alert.alert('Tidak Cukup', 'Jumlah bayar kurang dari total yang harus dibayar.');
         return;
       }
     }
@@ -786,10 +787,21 @@ export default function TransactionForm() {
                     </View>
                     {paidAmount ? (
                       <View style={{ minWidth: 110, alignItems: 'flex-end' }}>
-                        <Text style={{ color: theme.colors.textMuted, fontSize: 10 }}>Kembalian</Text>
-                        <Text style={{ color: theme.colors.success, fontSize: 14, fontWeight: '800' }}>
-                          {formatCurrency(Math.max(0, parseCurrency(paidAmount) - grandTotal))}
-                        </Text>
+                        {parseCurrency(paidAmount) < grandTotal ? (
+                          <>
+                            <Text style={{ color: theme.colors.textMuted, fontSize: 10 }}>Kurang</Text>
+                            <Text style={{ color: theme.colors.danger, fontSize: 14, fontWeight: '800' }}>
+                              {formatCurrency(grandTotal - parseCurrency(paidAmount))}
+                            </Text>
+                          </>
+                        ) : (
+                          <>
+                            <Text style={{ color: theme.colors.textMuted, fontSize: 10 }}>Kembalian</Text>
+                            <Text style={{ color: theme.colors.success, fontSize: 14, fontWeight: '800' }}>
+                              {formatCurrency(parseCurrency(paidAmount) - grandTotal)}
+                            </Text>
+                          </>
+                        )}
                       </View>
                     ) : null}
                   </View>
@@ -861,7 +873,9 @@ export default function TransactionForm() {
               <Pressable
                 onPress={() => {
                   setCustomerPickerOpen(false);
-                  router.push('/customer-form');
+                  setTimeout(() => {
+                    router.push('/customer-form');
+                  }, 150);
                 }}
               >
                 <Ionicons name="add-circle" size={28} color={theme.colors.accent} />

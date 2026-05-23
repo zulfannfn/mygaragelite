@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
 import React, { useCallback, useState } from 'react';
-import { FlatList, Modal, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { FlatList, Modal, Platform, Pressable, ScrollView, Text, TextInput, View, KeyboardAvoidingView } from 'react-native';
 import { Badge } from '../../src/components/ui/Badge';
 import { Card } from '../../src/components/ui/Card';
 import { EmptyState } from '../../src/components/ui/EmptyState';
@@ -452,6 +452,7 @@ export default function TransactionsScreen() {
         animationType="fade"
         onRequestClose={() => setFilterModalOpen(false)}
       >
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
         <Pressable
           style={{
             flex: 1,
@@ -461,7 +462,8 @@ export default function TransactionsScreen() {
           }}
           onPress={() => setFilterModalOpen(false)}
         >
-          <View
+          <Pressable
+            onPress={(e) => e.stopPropagation()}
             style={{
               backgroundColor: theme.colors.card,
               borderRadius: theme.radius.xl,
@@ -654,8 +656,9 @@ export default function TransactionsScreen() {
                 <Text style={{ color: theme.colors.textSecondary, fontWeight: '700', fontSize: 14 }}>Reset</Text>
               </Pressable>
             </View>
-          </View>
+          </Pressable>
         </Pressable>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );

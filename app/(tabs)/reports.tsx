@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from 'expo-router';
 import React, { useCallback, useState } from 'react';
-import { Modal, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { Modal, Platform, Pressable, ScrollView, Text, TextInput, View, KeyboardAvoidingView } from 'react-native';
 import { Button } from '../../src/components/ui/Button';
 import { Card } from '../../src/components/ui/Card';
 import { ScreenHeader } from '../../src/components/ui/ScreenHeader';
@@ -392,42 +392,50 @@ export default function ReportsScreen() {
           {loading ? (
             <Skeleton height={80} />
           ) : (
-            <View style={{ gap: 0 }}>
-              {monthly.map((m, i) => (
-                <View
-                  key={i}
-                  style={{
-                    flexDirection: 'row',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    paddingVertical: 8,
-                    borderBottomWidth: i < monthly.length - 1 ? 1 : 0,
-                    borderBottomColor: theme.colors.divider,
-                  }}
-                >
-                  <Text style={{ color: theme.colors.text, fontSize: 14 }}>{m.date}</Text>
-                  <View style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>
-                    <View style={{ alignItems: 'flex-end' }}>
-                      <Text style={{ color: theme.colors.accent, fontSize: 13, fontWeight: '700' }}>
-                        {formatCurrency(m.serviceRevenue)}
-                      </Text>
-                      <Text style={{ color: theme.colors.textMuted, fontSize: 10 }}>
-                        {m.serviceCount} svc
-                      </Text>
+            <ScrollView nestedScrollEnabled={true} style={{ maxHeight: 250 }} showsVerticalScrollIndicator={false}>
+              {monthly.filter(m => m.serviceRevenue > 0 || m.retailRevenue > 0).length === 0 ? (
+                <Text style={{ color: theme.colors.textMuted, textAlign: 'center', padding: 12 }}>
+                  Belum ada data
+                </Text>
+              ) : (
+                <View style={{ gap: 0 }}>
+                  {monthly.filter(m => m.serviceRevenue > 0 || m.retailRevenue > 0).map((m, i, arr) => (
+                    <View
+                      key={i}
+                      style={{
+                        flexDirection: 'row',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        paddingVertical: 8,
+                        borderBottomWidth: i < arr.length - 1 ? 1 : 0,
+                        borderBottomColor: theme.colors.divider,
+                      }}
+                    >
+                      <Text style={{ color: theme.colors.text, fontSize: 14 }}>{m.date}</Text>
+                      <View style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>
+                        <View style={{ alignItems: 'flex-end' }}>
+                          <Text style={{ color: theme.colors.accent, fontSize: 13, fontWeight: '700' }}>
+                            {formatCurrency(m.serviceRevenue)}
+                          </Text>
+                          <Text style={{ color: theme.colors.textMuted, fontSize: 10 }}>
+                            {m.serviceCount} svc
+                          </Text>
+                        </View>
+                        <View style={{ width: 1, backgroundColor: theme.colors.divider, height: 20 }} />
+                        <View style={{ alignItems: 'flex-end' }}>
+                          <Text style={{ color: theme.colors.success, fontSize: 13, fontWeight: '700' }}>
+                            {formatCurrency(m.retailRevenue)}
+                          </Text>
+                          <Text style={{ color: theme.colors.textMuted, fontSize: 10 }}>
+                            {m.retailCount} ksr
+                          </Text>
+                        </View>
+                      </View>
                     </View>
-                    <View style={{ width: 1, backgroundColor: theme.colors.divider, height: 20 }} />
-                    <View style={{ alignItems: 'flex-end' }}>
-                      <Text style={{ color: theme.colors.success, fontSize: 13, fontWeight: '700' }}>
-                        {formatCurrency(m.retailRevenue)}
-                      </Text>
-                      <Text style={{ color: theme.colors.textMuted, fontSize: 10 }}>
-                        {m.retailCount} ksr
-                      </Text>
-                    </View>
-                  </View>
+                  ))}
                 </View>
-              ))}
-            </View>
+              )}
+            </ScrollView>
           )}
         </Card>
       </View>
@@ -998,6 +1006,7 @@ export default function ReportsScreen() {
         animationType="fade"
         onRequestClose={() => setSortModal(null)}
       >
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
         <Pressable
           style={{
             flex: 1,
@@ -1007,7 +1016,8 @@ export default function ReportsScreen() {
           }}
           onPress={() => setSortModal(null)}
         >
-          <View
+          <Pressable
+            onPress={(e) => e.stopPropagation()}
             style={{
               backgroundColor: theme.colors.card,
               borderRadius: theme.radius.xl,
@@ -1215,8 +1225,9 @@ export default function ReportsScreen() {
                 </Text>
               </Pressable>
             </View>
-          </View>
+          </Pressable>
         </Pressable>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* Export */}

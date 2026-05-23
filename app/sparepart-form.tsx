@@ -26,6 +26,7 @@ export default function SparepartForm() {
   const [category, setCategory] = useState<string>('Lainnya');
   const [customCategory, setCustomCategory] = useState('');
   const [showCustomCategory, setShowCustomCategory] = useState(false);
+  const [existingCustomCategories, setExistingCustomCategories] = useState<string[]>([]);
   const [stock, setStock] = useState('0');
   const [minStock, setMinStock] = useState('5');
   const [buyPrice, setBuyPrice] = useState('');
@@ -35,11 +36,22 @@ export default function SparepartForm() {
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   useEffect(() => {
+    sparepartService.getUniqueCategories().then((cats) => {
+      const customs = cats.filter(c => !SPAREPART_CATEGORIES.includes(c));
+      setExistingCustomCategories(customs);
+    });
+
     if (isEdit && id) {
       sparepartService.getById(id).then((s) => {
         if (!s) return;
         setName(s.name);
         setCategory(s.category);
+        if (!SPAREPART_CATEGORIES.includes(s.category)) {
+          // If the loaded sparepart uses a custom category,
+          // we can just set category to that value since it's now in the list.
+          // Wait, if it's in the list, we don't need to show custom category input,
+          // because they can just pick it from the list!
+        }
         setStock(String(s.stock));
         setMinStock(String(s.min_stock));
         setBuyPrice(String(s.buy_price));
@@ -52,6 +64,7 @@ export default function SparepartForm() {
     const e: Record<string, string> = {};
     if (isEmpty(name)) e.name = 'Nama wajib diisi';
     if (parseCurrency(sellPrice) <= 0) e.sellPrice = 'Harga jual harus > 0';
+    if (showCustomCategory && isEmpty(customCategory)) e.customCategory = 'Kategori baru wajib diisi';
     setErrors(e);
     return Object.keys(e).length === 0;
   };
@@ -110,7 +123,7 @@ export default function SparepartForm() {
           <Picker
             label="Kategori"
             value={category}
-            options={[...SPAREPART_CATEGORIES, 'Tambah Kategori Baru']}
+            options={[...SPAREPART_CATEGORIES, ...existingCustomCategories, 'Tambah Kategori Baru']}
             optionIcons={{
               'Oli': 'water',
               'Filter': 'filter',
@@ -126,6 +139,7 @@ export default function SparepartForm() {
             }}
             onChange={(v) => {
               if (v === 'Tambah Kategori Baru') {
+                setCategory('Tambah Kategori Baru');
                 setShowCustomCategory(true);
               } else {
                 setCategory(v);
@@ -135,10 +149,11 @@ export default function SparepartForm() {
           />
           {showCustomCategory && (
             <Input
-              label="Nama Kategori Baru"
+              label="Nama Kategori Baru *"
               value={customCategory}
               onChangeText={setCustomCategory}
               placeholder="Masukkan nama kategori"
+              error={errors.customCategory}
             />
           )}
           <View style={{ flexDirection: 'row', gap: 10 }}>

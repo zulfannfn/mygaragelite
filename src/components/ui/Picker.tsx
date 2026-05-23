@@ -66,13 +66,13 @@ export function Picker<T extends string>({
         })}
       >
         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-          <View style={{ width: 36, alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
+          <View style={{ width: 40, alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
             {valueIcon ? (
               <View
                 style={{
-                  width: 32,
-                  height: 32,
-                  borderRadius: 8,
+                  width: 40,
+                  height: 40,
+                  borderRadius: 10,
                   backgroundColor: (valueColor ?? theme.colors.accent) + '18',
                   alignItems: 'center',
                   justifyContent: 'center',
@@ -80,22 +80,22 @@ export function Picker<T extends string>({
               >
                 <Ionicons
                   name={valueIcon}
-                  size={16}
+                  size={18}
                   color={valueColor ?? theme.colors.accent}
                 />
               </View>
             ) : (
               <View
                 style={{
-                  width: 32,
-                  height: 32,
-                  borderRadius: 16,
+                  width: 40,
+                  height: 40,
+                  borderRadius: 10,
                   backgroundColor: theme.colors.borderLight,
                   alignItems: 'center',
                   justifyContent: 'center',
                 }}
               >
-                <Ionicons name="person" size={16} color={theme.colors.textSecondary} />
+                <Ionicons name="person" size={18} color={theme.colors.textSecondary} />
               </View>
             )}
           </View>

@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
-import { Modal, Platform, Pressable, ScrollView, Text, View } from 'react-native';
+import { Modal, Platform, Pressable, ScrollView, Text, View, Alert } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AddServiceSheet } from '../src/components/ui/AddServiceSheet';
 import { AddSparepartSheet } from '../src/components/ui/AddSparepartSheet';
@@ -846,16 +846,32 @@ export default function TransactionDetail() {
           {tx.status === 'pending' && tx.type !== 'retail' && (
             <Button
               title="Tandai Lunas"
-              onPress={() => setPaymentPickerOpen(true)}
+              onPress={() => {
+                const isComplete =
+                  tx.complaint?.trim() &&
+                  tx.service_items && tx.service_items.length > 0 &&
+                  tx.spareparts && tx.spareparts.length > 0 &&
+                  tx.recommendation?.trim() &&
+                  tx.mechanic_notes?.trim();
+
+                if (!isComplete) {
+                  Alert.alert('Perhatian', 'Lengkapi dulu keluhan, jasa servis, sparepart, rekomendasi servis, dan catatan mekanik.');
+                  return;
+                }
+                setPaymentPickerOpen(true);
+              }}
               size="lg"
               fullWidth
+              style={{
+                opacity: (tx.complaint?.trim() && tx.service_items?.length && tx.spareparts?.length && tx.recommendation?.trim() && tx.mechanic_notes?.trim()) ? 1 : 0.5
+              }}
               icon={<Ionicons name="checkmark-circle" size={18} color="#fff" />}
             />
           )}
           {tx.status !== 'cancelled' && (
             <Button
               title="Hapus"
-              variant="danger"
+              variant="outline-danger"
               onPress={() => setConfirmDelete(true)}
               fullWidth
             />
@@ -863,7 +879,7 @@ export default function TransactionDetail() {
           {tx.status === 'cancelled' && (
             <Button
               title="Hapus Transaksi"
-              variant="danger"
+              variant="outline-danger"
               onPress={() => setConfirmDelete(true)}
               fullWidth
             />

@@ -52,6 +52,14 @@ export const sparepartService = {
     );
   },
 
+  async getUniqueCategories(): Promise<string[]> {
+    const db = await getDatabase();
+    const rows = await db.getAllAsync<{ category: string }>(
+      'SELECT DISTINCT category FROM spareparts WHERE category IS NOT NULL ORDER BY category ASC'
+    );
+    return rows.map(r => r.category);
+  },
+
   async create(input: SparepartInput): Promise<Sparepart> {
     const db = await getDatabase();
     const now = Date.now();
