@@ -1,30 +1,51 @@
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
-import { getDatabase, resetDatabase } from '../database/db';
-import { generateId } from '../utils/id';
+import * as SQLite from 'expo-sqlite';
+import { clearDatabase, getDatabase } from '../database/db';
 
 interface BackupData {
   version: number;
   timestamp: number;
-  customers: any[];
-  spareparts: any[];
-  transactions: any[];
-  service_items: any[];
-  transaction_spareparts: any[];
-  reminders: any[];
-  settings: any[];
-  employees?: any[];
+  customers: Record<string, unknown>[];
+  spareparts: Record<string, unknown>[];
+  services?: Record<string, unknown>[];
+  transactions: Record<string, unknown>[];
+  service_items: Record<string, unknown>[];
+  transaction_spareparts: Record<string, unknown>[];
+  reminders: Record<string, unknown>[];
+  settings: Record<string, unknown>[];
+  employees?: Record<string, unknown>[];
+}
+
+async function insertRows(
+  db: SQLite.SQLiteDatabase,
+  table: string,
+  rows: Record<string, unknown>[]
+): Promise<void> {
+  if (rows.length === 0) return;
+
+  const tableInfo = await db.getAllAsync<{ name: string }>(`PRAGMA table_info(${table})`);
+  const validCols = new Set(tableInfo.map((c) => c.name));
+
+  for (const row of rows) {
+    const cols = Object.keys(row).filter((c) => validCols.has(c));
+    if (cols.length === 0) continue;
+    const placeholders = cols.map(() => '?').join(',');
+    const sql = `INSERT INTO ${table} (${cols.join(',')}) VALUES (${placeholders})`;
+    await db.runAsync(sql, ...cols.map((c) => row[c] as any));
+  }
 }
 
 export const backupService = {
   async exportBackup(): Promise<void> {
     const db = await getDatabase();
     const backup: BackupData = {
-      version: 2,
+      version: 3,
       timestamp: Date.now(),
       customers: await db.getAllAsync('SELECT * FROM customers'),
       spareparts: await db.getAllAsync('SELECT * FROM spareparts'),
+      services: await db.getAllAsync('SELECT * FROM services'),
       transactions: await db.getAllAsync('SELECT * FROM transactions'),
       service_items: await db.getAllAsync('SELECT * FROM service_items'),
       transaction_spareparts: await db.getAllAsync('SELECT * FROM transaction_spareparts'),
@@ -56,50 +77,29 @@ export const backupService = {
 
     try {
       const content = await FileSystem.readAsStringAsync(result.assets[0].uri);
-      const backup: BackupData = JSON.parse(content);
-      if (!backup.version || !backup.customers) {
+      const backup = JSON.parse(content) as BackupData;
+
+      if (!backup.version || !Array.isArray(backup.customers) || !Array.isArray(backup.transactions)) {
         return { ok: false, message: 'File backup tidak valid' };
       }
 
-      await resetDatabase();
+      await clearDatabase();
       const db = await getDatabase();
 
-      // Clear seed data
-      await db.execAsync(`
-        DELETE FROM transaction_spareparts;
-        DELETE FROM service_items;
-        DELETE FROM reminders;
-        DELETE FROM transactions;
-        DELETE FROM spareparts;
-        DELETE FROM customers;
-        DELETE FROM employees;
-      `);
-
-      const insertAll = async (table: string, rows: any[]) => {
-        if (rows.length === 0) return;
-        const cols = Object.keys(rows[0]);
-        const placeholders = cols.map(() => '?').join(',');
-        const sql = `INSERT INTO ${table} (${cols.join(',')}) VALUES (${placeholders})`;
-        for (const row of rows) {
-          await db.runAsync(sql, ...cols.map((c) => row[c]));
-        }
-      };
-
-      await insertAll('customers', backup.customers);
-      await insertAll('spareparts', backup.spareparts);
-      await insertAll('employees', backup.employees ?? []);
-      await insertAll('transactions', backup.transactions);
-      await insertAll('service_items', backup.service_items);
-      await insertAll('transaction_spareparts', backup.transaction_spareparts);
-      await insertAll('reminders', backup.reminders);
-      await insertAll('settings', backup.settings);
+      await insertRows(db, 'customers', backup.customers);
+      await insertRows(db, 'spareparts', backup.spareparts);
+      await insertRows(db, 'employees', backup.employees ?? []);
+      await insertRows(db, 'services', backup.services ?? []);
+      await insertRows(db, 'transactions', backup.transactions);
+      await insertRows(db, 'service_items', backup.service_items ?? []);
+      await insertRows(db, 'transaction_spareparts', backup.transaction_spareparts ?? []);
+      await insertRows(db, 'reminders', backup.reminders ?? []);
+      await insertRows(db, 'settings', backup.settings ?? []);
 
       return { ok: true, message: 'Restore berhasil' };
-    } catch (e: any) {
-      return { ok: false, message: 'Gagal: ' + (e?.message ?? 'unknown error') };
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'unknown error';
+      return { ok: false, message: 'Gagal: ' + msg };
     }
   },
-
-  // Helper to silence unused-import warning
-  _id: generateId,
 };

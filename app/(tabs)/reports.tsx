@@ -11,8 +11,9 @@ import { exportService } from '../../src/services/exportService';
 import { reportService } from '../../src/services/reportService';
 import { transactionService } from '../../src/services/transactionService';
 import { useAppStore } from '../../src/store/useAppStore';
-import { PaymentMethodTotal, ReportData, TopMechanic, TopService, TopSparepart } from '../../src/types';
+import { CategoryStats, PaymentMethodTotal, ReportData, TopMechanic, TopService, TopSparepart } from '../../src/types';
 import { formatCompactCurrency, formatCurrency } from '../../src/utils/currency';
+import { AdBanner, InterstitialAd } from '../../src/components/ui/AdBanner';
 type SectionKey = 'service' | 'sparepart' | 'mechanic' | 'paymentMethod' | 'category';
 
 interface DateRange {
@@ -202,7 +203,7 @@ export default function ReportsScreen() {
   const [topSvcSort, setTopSvcSort] = useState<'sold' | 'revenue'>('sold');
   const [topSpSort, setTopSpSort] = useState<'sold' | 'revenue'>('sold');
   const [topSpType, setTopSpType] = useState<'all' | 'service' | 'retail'>('all');
-  const [sortModal, setSortModal] = useState<'service' | 'sparepart' | 'mechanic' | 'paymentMethod' | null>(null);
+  const [sortModal, setSortModal] = useState<SectionKey | null>(null);
 
   const [paymentMethodData, setPaymentMethodData] = useState<PaymentMethodTotal[]>([]);
   const [paymentMethodType, setPaymentMethodType] = useState<'all' | 'service' | 'retail'>('all');
@@ -264,9 +265,14 @@ export default function ReportsScreen() {
   const exportCSV = async () => {
     try {
       setExporting(true);
-      const tx = await transactionService.getAll();
+      const tx = await transactionService.getAllWithLineItems();
+      if (tx.length === 0) {
+        showToast('Tidak ada transaksi untuk diexport', 'error');
+        return;
+      }
       await exportService.exportTransactionsToCSV(tx);
       showToast('Berhasil export CSV', 'success');
+      await InterstitialAd.show();
     } catch (e: any) {
       console.error('Export error:', e);
       showToast('Gagal export: ' + (e?.message ?? 'Unknown error'), 'error');
@@ -1006,7 +1012,7 @@ export default function ReportsScreen() {
         animationType="fade"
         onRequestClose={() => setSortModal(null)}
       >
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
+        <KeyboardAvoidingView behavior="padding" style={{ flex: 1 }}>
         <Pressable
           style={{
             flex: 1,
@@ -1240,6 +1246,11 @@ export default function ReportsScreen() {
           icon={<Ionicons name="grid" size={18} color="#fff" />}
           fullWidth
         />
+      </View>
+
+      {/* Banner Ad */}
+      <View style={{ marginTop: 20 }}>
+        <AdBanner />
       </View>
     </ScrollView>
   );

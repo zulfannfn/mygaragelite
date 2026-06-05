@@ -8,6 +8,7 @@ import { ScreenHeader } from '../src/components/ui/ScreenHeader';
 import { useTheme } from '../src/contexts/ThemeContext';
 import { serviceService } from '../src/services/serviceService';
 import { useAppStore } from '../src/store/useAppStore';
+import { InterstitialAd } from '../src/components/ui/AdBanner';
 import { isEmpty } from '../src/utils/validation';
 
 export default function ServiceForm() {
@@ -52,6 +53,7 @@ export default function ServiceForm() {
       if (isEdit && id) {
         await serviceService.update(id, input);
         showToast('Jasa diperbarui', 'success');
+        await InterstitialAd.show();
       } else {
         await serviceService.create(input);
         showToast('Jasa ditambahkan', 'success');
@@ -76,10 +78,10 @@ export default function ServiceForm() {
     <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
       <ScreenHeader title={isEdit ? 'Edit Jasa' : 'Jasa Baru'} showBack />
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior="padding"
         style={{ flex: 1 }}
       >
-        <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 40 + (Platform.OS === 'android' ? 48 : 34) }}>
+        <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 120, gap: 16 }} keyboardShouldPersistTaps="handled">
           <Input
             label="Nama Jasa *"
             value={name}

@@ -1,9 +1,32 @@
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
-import { Transaction } from '../types';
+import { Transaction, TransactionStatus, TransactionType } from '../types';
 import { formatCurrency } from '../utils/currency';
 import { formatDateTime } from '../utils/date';
+
+const STATUS_LABELS: Record<TransactionStatus, string> = {
+  pending: 'Menunggu',
+  paid: 'Lunas',
+  cancelled: 'Batal',
+};
+
+const TYPE_LABELS: Record<TransactionType, string> = {
+  service: 'Servis',
+  retail: 'Retail',
+};
+
+function csvCell(value: string | number | null | undefined): string {
+  const s = value == null ? '' : String(value);
+  if (/[",\r\n]/.test(s)) {
+    return `"${s.replace(/"/g, '""')}"`;
+  }
+  return s;
+}
+
+function csvRow(cells: (string | number | null | undefined)[]): string {
+  return cells.map(csvCell).join(',');
+}
 
 export const exportService = {
   async exportTransactionsToPDF(
@@ -65,43 +88,106 @@ export const exportService = {
     }
   },
 
+  /**
+   * Row-level CSV: satu baris per item jasa atau sparepart.
+   * UTF-8 BOM agar Excel membuka kolom dengan benar.
+   */
   async exportTransactionsToCSV(transactions: Transaction[]): Promise<void> {
-    const header = 'No,ID,Tanggal,Pelanggan ID,Pelanggan,Plat Nomor,Telepon,Mekanik ID,Mekanik,Keluhan,Rekomendasi,Catatan Mekanik,Tipe,Status,Metode Pembayaran,Dibayar,Kembalian,Total Jasa,Total Sparepart,Total\n';
-    const rows = transactions
-      .map((t, idx) =>
-        [
-          idx + 1,
+    const header = csvRow([
+      'No',
+      'ID Transaksi',
+      'Tanggal',
+      'Status',
+      'Tipe Transaksi',
+      'Pelanggan',
+      'Plat Nomor',
+      'Telepon',
+      'Mekanik',
+      'Kasir',
+      'Metode Bayar',
+      'Jenis Item',
+      'Nama Item',
+      'Qty',
+      'Harga Satuan',
+      'Subtotal Item',
+      'Total Jasa (Transaksi)',
+      'Total Sparepart (Transaksi)',
+      'Total Transaksi',
+    ]);
+
+    const rows: string[] = [];
+    let rowNumber = 1;
+
+    const pushLineRow = (
+      t: Transaction,
+      itemType: string,
+      itemName: string,
+      qty: number,
+      unitPrice: number,
+      lineSubtotal: number
+    ) => {
+      rows.push(
+        csvRow([
+          rowNumber++,
           t.id,
           formatDateTime(t.created_at),
-          t.customer_id ?? '-',
-          (t.customer_name ?? '-').replace(/,/g, ' '),
+          STATUS_LABELS[t.status] ?? t.status,
+          TYPE_LABELS[t.type] ?? t.type,
+          t.customer_name ?? '-',
           t.customer_plate ?? '-',
           t.customer_phone ?? '-',
-          t.mechanic_id ?? '-',
-          (t.mechanic_name ?? '-').replace(/,/g, ' '),
-          (t.complaint ?? '-').replace(/,/g, ' '),
-          (t.recommendation ?? '-').replace(/,/g, ' '),
-          (t.mechanic_notes ?? '-').replace(/,/g, ' '),
-          t.type,
-          t.status,
-          (t.payment_method ?? '-').replace(/,/g, ' '),
-          t.paid_amount,
-          t.change_amount,
+          t.mechanic_name ?? '-',
+          t.cashier_name ?? '-',
+          t.payment_method ?? '-',
+          itemType,
+          itemName,
+          qty,
+          unitPrice,
+          lineSubtotal,
           t.total_service,
           t.total_sparepart,
           t.total_amount,
-        ].join(',')
-      )
-      .join('\n');
+        ])
+      );
+    };
 
-    const csv = header + rows;
-    const filename = `transaksi_${Date.now()}.csv`;
+    for (const t of transactions) {
+      const services = t.service_items ?? [];
+      const spareparts = t.spareparts ?? [];
+
+      for (const item of services) {
+        pushLineRow(t, 'Jasa', item.service_name, 1, item.price, item.price);
+      }
+
+      for (const item of spareparts) {
+        const qty = item.quantity ?? 1;
+        const unitPrice = item.sell_price ?? 0;
+        pushLineRow(
+          t,
+          'Sparepart',
+          item.sparepart_name ?? '-',
+          qty,
+          unitPrice,
+          qty * unitPrice
+        );
+      }
+
+      if (services.length === 0 && spareparts.length === 0) {
+        pushLineRow(t, '-', '(tidak ada item)', 0, 0, 0);
+      }
+    }
+
+    const csv = '\uFEFF' + header + '\n' + rows.join('\n');
+    const filename = `transaksi_detail_${Date.now()}.csv`;
     const fileUri = (FileSystem.documentDirectory ?? '') + filename;
     await FileSystem.writeAsStringAsync(fileUri, csv, {
       encoding: FileSystem.EncodingType.UTF8,
     });
     if (await Sharing.isAvailableAsync()) {
-      await Sharing.shareAsync(fileUri, { mimeType: 'text/csv', dialogTitle: 'Export CSV' });
+      await Sharing.shareAsync(fileUri, {
+        mimeType: 'text/csv',
+        dialogTitle: 'Export CSV / Excel',
+      });
     }
   },
 };

@@ -1,8 +1,18 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
-import { Modal, Platform, Pressable, ScrollView, Text, View, Alert } from 'react-native';
+import {
+  Alert,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  Pressable,
+  ScrollView,
+  Text,
+  View,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { InterstitialAd, RewardAd } from '../src/components/ui/AdBanner';
 import { AddServiceSheet } from '../src/components/ui/AddServiceSheet';
 import { AddSparepartSheet } from '../src/components/ui/AddSparepartSheet';
 import { Badge } from '../src/components/ui/Badge';
@@ -18,8 +28,9 @@ import { transactionService } from '../src/services/transactionService';
 import { useAppStore } from '../src/store/useAppStore';
 import { useTransactionStore } from '../src/store/useTransactionStore';
 import { Transaction } from '../src/types';
-import { formatCurrency } from '../src/utils/currency';
+import { formatCurrency, parseCurrency } from '../src/utils/currency';
 import { formatDateTime } from '../src/utils/date';
+import { handleReceiptPrintError } from '../src/utils/printerAlert';
 
 export default function TransactionDetail() {
   const router = useRouter();
@@ -47,6 +58,7 @@ export default function TransactionDetail() {
   const [paymentPickerOpen, setPaymentPickerOpen] = useState(false);
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<string | null>(null);
   const [confirmPaidModal, setConfirmPaidModal] = useState(false);
+  const [paidAmount, setPaidAmount] = useState('');
   const [receiptPickerOpen, setReceiptPickerOpen] = useState(false);
   const [selectedReceiptType, setSelectedReceiptType] = useState<'diterima' | 'tagihan'>('tagihan');
 
@@ -70,16 +82,30 @@ export default function TransactionDetail() {
   const markPaid = async (method: string) => {
     if (!id) return;
     setSelectedPaymentMethod(method);
+    setPaidAmount('');
     setConfirmPaidModal(true);
   };
 
   const confirmMarkPaid = async () => {
-    if (!id || !selectedPaymentMethod) return;
+    if (!id || !selectedPaymentMethod || !tx) return;
     setConfirmPaidModal(false);
-    await updateStatus(id, 'paid', selectedPaymentMethod as any);
-    setTx((p) => (p ? { ...p, status: 'paid', payment_method: selectedPaymentMethod as any } : p));
+
+    let paid = 0;
+    let change = 0;
+
+    if (selectedPaymentMethod === 'Tunai') {
+      paid = parseCurrency(paidAmount);
+      change = Math.max(0, paid - tx.total_amount);
+    } else {
+      paid = tx.total_amount;
+    }
+
+    await updateStatus(id, 'paid', selectedPaymentMethod as any, paid, change);
+    setTx((p) => (p ? { ...p, status: 'paid', payment_method: selectedPaymentMethod as any, paid_amount: paid, change_amount: change } : p));
     setSelectedPaymentMethod(null);
+    setPaidAmount('');
     showToast('Status diperbarui', 'success');
+    await InterstitialAd.show();
   };
 
   const cancel = async () => {
@@ -99,6 +125,7 @@ export default function TransactionDetail() {
     if (!id) return;
     await remove(id);
     showToast('Transaksi dihapus', 'success');
+    RewardAd.show();
     router.back();
   };
 
@@ -106,9 +133,13 @@ export default function TransactionDetail() {
     if (!tx) return;
     setActionBusy('print');
     try {
-      await receiptService.printPdf(tx);
-    } catch (e: any) {
-      showToast('Gagal cetak: ' + (e?.message ?? ''), 'error');
+      const method = await receiptService.printPdf(tx);
+      if (method === 'bluetooth') {
+        showToast('Struk dikirim ke printer', 'success');
+      }
+      await InterstitialAd.show();
+    } catch (e: unknown) {
+      handleReceiptPrintError(e, router, showToast);
     } finally {
       setActionBusy(null);
     }
@@ -244,10 +275,16 @@ export default function TransactionDetail() {
         <Card style={{ marginBottom: 12, backgroundColor: theme.colors.primary }}>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
             <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 12 }}>TOTAL</Text>
-            <Badge
-              label={tx.status === 'paid' ? 'Lunas' : tx.status === 'pending' ? 'Pending' : 'Batal'}
-              variant={tx.status === 'paid' ? 'success' : tx.status === 'pending' ? 'warning' : 'danger'}
-            />
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <Badge
+                label={tx.type === 'retail' ? 'Kasir' : 'Service'}
+                variant={tx.type === 'retail' ? 'info' : 'accent'}
+              />
+              <Badge
+                label={tx.status === 'paid' ? 'Lunas' : tx.status === 'pending' ? 'Pending' : 'Batal'}
+                variant={tx.status === 'paid' ? 'success' : tx.status === 'pending' ? 'warning' : 'danger'}
+              />
+            </View>
           </View>
           <Text style={{ color: '#fff', fontSize: 32, fontWeight: '800', marginTop: 4 }}>
             {formatCurrency(tx.total_amount)}
@@ -783,8 +820,8 @@ export default function TransactionDetail() {
           </>
         )}
 
-        {/* Retail: Bayar & Kembalian (only for Tunai) */}
-        {tx.type === 'retail' && (
+        {/* Rincian pembayaran (tampil saat lunas — servis & kasir) */}
+        {tx.status === 'paid' && (
           <Card style={{ marginBottom: 12 }}>
             <Text style={sectionLabel}>RINCIAN PEMBAYARAN</Text>
             <View style={{ marginTop: 6, gap: 6 }}>
@@ -1238,120 +1275,210 @@ export default function TransactionDetail() {
         animationType="fade"
         onRequestClose={() => setConfirmPaidModal(false)}
       >
-        <View
-          style={{
-            flex: 1,
-            backgroundColor: 'rgba(0,0,0,0.7)',
-            justifyContent: 'center',
-            padding: 24,
-          }}
+        <KeyboardAvoidingView
+          behavior="padding"
+          style={{ flex: 1 }}
         >
-          <View
+          <Pressable
             style={{
-              backgroundColor: theme.colors.card,
-              borderRadius: theme.radius.xl,
-              padding: 20,
-              borderWidth: 1,
-              borderColor: theme.colors.border,
-              maxHeight: '85%',
+              flex: 1,
+              backgroundColor: 'rgba(0,0,0,0.7)',
+              justifyContent: 'center',
+              padding: 24,
             }}
+            onPress={() => setConfirmPaidModal(false)}
           >
-            <Text style={{ color: theme.colors.text, fontSize: 16, fontWeight: '700', marginBottom: 12, textAlign: 'center' }}>
-              Validasi Pembayaran
-            </Text>
-
-            <ScrollView style={{ maxHeight: 320 }} showsVerticalScrollIndicator={false}>
-              {/* Items */}
-              <Text style={{ color: theme.colors.textSecondary, fontSize: 12, fontWeight: '600', marginBottom: 6 }}>Rincian Transaksi</Text>
-              <View style={{ gap: 0, marginBottom: 12 }}>
-                {tx.service_items && tx.service_items.length > 0 && tx.service_items.map((s, i) => (
-                  <View
-                    key={s.id}
-                    style={{
-                      flexDirection: 'row',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      paddingVertical: 8,
-                      borderBottomWidth: i === tx.service_items!.length - 1 ? 0 : 1,
-                      borderBottomColor: theme.colors.divider,
-                    }}
-                  >
-                    <View style={{ flex: 1 }}>
-                      <Text style={{ color: theme.colors.text, fontSize: 13, fontWeight: '500' }} numberOfLines={1}>
-                        {s.service_name}
-                      </Text>
-                    </View>
-                    <Text style={{ color: theme.colors.text, fontSize: 13, fontWeight: '700' }}>
-                      {formatCurrency(s.price)}
-                    </Text>
-                  </View>
-                ))}
-                {tx.spareparts && tx.spareparts.length > 0 && tx.spareparts.map((p, i) => (
-                  <View
-                    key={p.id}
-                    style={{
-                      flexDirection: 'row',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      paddingVertical: 8,
-                      borderBottomWidth: i === tx.spareparts!.length - 1 ? 0 : 1,
-                      borderBottomColor: theme.colors.divider,
-                    }}
-                  >
-                    <View style={{ flex: 1 }}>
-                      <Text style={{ color: theme.colors.text, fontSize: 13, fontWeight: '500' }} numberOfLines={1}>
-                        {p.sparepart_name}
-                      </Text>
-                      <Text style={{ color: theme.colors.textMuted, fontSize: 11 }}>
-                        {formatCurrency(p.sell_price)} × {p.quantity}
-                      </Text>
-                    </View>
-                    <Text style={{ color: theme.colors.text, fontSize: 13, fontWeight: '700' }}>
-                      {formatCurrency(p.sell_price * p.quantity)}
-                    </Text>
-                  </View>
-                ))}
-              </View>
-
-              {/* Totals */}
-              <View
+            <Pressable
+              onPress={(e) => e.stopPropagation()}
+              style={{
+                backgroundColor: theme.colors.card,
+                borderRadius: theme.radius.xl,
+                padding: 20,
+                borderWidth: 1,
+                borderColor: theme.colors.border,
+                maxHeight: '85%',
+              }}
+            >
+              <Text
                 style={{
-                  backgroundColor: theme.colors.cardLight,
-                  borderRadius: theme.radius.lg,
-                  padding: 14,
-                  gap: 8,
+                  color: theme.colors.text,
+                  fontSize: 16,
+                  fontWeight: '700',
+                  marginBottom: 12,
+                  textAlign: 'center',
                 }}
               >
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                  <Text style={{ color: theme.colors.textSecondary, fontSize: 13 }}>Total</Text>
-                  <Text style={{ color: theme.colors.text, fontSize: 14, fontWeight: '700' }}>
-                    {formatCurrency(tx.total_amount)}
-                  </Text>
-                </View>
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                  <Text style={{ color: theme.colors.textSecondary, fontSize: 13 }}>Metode</Text>
-                  <Text style={{ color: theme.colors.text, fontSize: 14, fontWeight: '700' }}>
-                    {selectedPaymentMethod}
-                  </Text>
-                </View>
-              </View>
-            </ScrollView>
+                Validasi Pembayaran
+              </Text>
 
-            <View style={{ flexDirection: 'row', gap: 10, marginTop: 16 }}>
-              <Button
-                title="Batal"
-                variant="secondary"
-                fullWidth
-                onPress={() => setConfirmPaidModal(false)}
-              />
-              <Button
-                title="Lanjut"
-                fullWidth
-                onPress={confirmMarkPaid}
-              />
-            </View>
-          </View>
-        </View>
+              <ScrollView
+                style={{ maxHeight: 320 }}
+                keyboardShouldPersistTaps="handled"
+                showsVerticalScrollIndicator={false}
+              >
+                <Text
+                  style={{
+                    color: theme.colors.textSecondary,
+                    fontSize: 12,
+                    fontWeight: '600',
+                    marginBottom: 6,
+                  }}
+                >
+                  Rincian Transaksi
+                </Text>
+                <View style={{ gap: 0, marginBottom: 12 }}>
+                  {tx.service_items?.map((s, i) => (
+                    <View
+                      key={s.id}
+                      style={{
+                        flexDirection: 'row',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        paddingVertical: 8,
+                        borderBottomWidth: i === tx.service_items!.length - 1 ? 0 : 1,
+                        borderBottomColor: theme.colors.divider,
+                      }}
+                    >
+                      <Text
+                        style={{ color: theme.colors.text, fontSize: 13, fontWeight: '500', flex: 1 }}
+                        numberOfLines={1}
+                      >
+                        {s.service_name}
+                      </Text>
+                      <Text style={{ color: theme.colors.text, fontSize: 13, fontWeight: '700' }}>
+                        {formatCurrency(s.price)}
+                      </Text>
+                    </View>
+                  ))}
+                  {tx.spareparts?.map((p, i) => (
+                    <View
+                      key={p.id}
+                      style={{
+                        flexDirection: 'row',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        paddingVertical: 8,
+                        borderBottomWidth: i === tx.spareparts!.length - 1 ? 0 : 1,
+                        borderBottomColor: theme.colors.divider,
+                      }}
+                    >
+                      <View style={{ flex: 1 }}>
+                        <Text
+                          style={{ color: theme.colors.text, fontSize: 13, fontWeight: '500' }}
+                          numberOfLines={1}
+                        >
+                          {p.sparepart_name}
+                        </Text>
+                        <Text style={{ color: theme.colors.textMuted, fontSize: 11 }}>
+                          {formatCurrency(p.sell_price)} × {p.quantity}
+                        </Text>
+                      </View>
+                      <Text style={{ color: theme.colors.text, fontSize: 13, fontWeight: '700' }}>
+                        {formatCurrency(p.sell_price * p.quantity)}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+
+                <View
+                  style={{
+                    backgroundColor: theme.colors.cardLight,
+                    borderRadius: theme.radius.lg,
+                    padding: 14,
+                    gap: 8,
+                  }}
+                >
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                    <Text style={{ color: theme.colors.textSecondary, fontSize: 13 }}>Total</Text>
+                    <Text style={{ color: theme.colors.text, fontSize: 14, fontWeight: '700' }}>
+                      {formatCurrency(tx.total_amount)}
+                    </Text>
+                  </View>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                    <Text style={{ color: theme.colors.textSecondary, fontSize: 13 }}>Metode</Text>
+                    <Text style={{ color: theme.colors.text, fontSize: 14, fontWeight: '700' }}>
+                      {selectedPaymentMethod}
+                    </Text>
+                  </View>
+
+                  {selectedPaymentMethod === 'Tunai' && (
+                    <>
+                      <View style={{ marginTop: 8 }}>
+                        <Text
+                          style={{
+                            color: theme.colors.textSecondary,
+                            fontSize: 13,
+                            marginBottom: 4,
+                          }}
+                        >
+                          Bayar (Rp)
+                        </Text>
+                        <Input
+                          value={paidAmount}
+                          onChangeText={setPaidAmount}
+                          placeholder="Masukkan jumlah uang..."
+                          keyboardType="numeric"
+                        />
+                      </View>
+
+                      {paidAmount ? (
+                        <View
+                          style={{
+                            marginTop: 8,
+                            flexDirection: 'row',
+                            justifyContent: 'space-between',
+                          }}
+                        >
+                          {parseCurrency(paidAmount) < tx.total_amount ? (
+                            <>
+                              <Text style={{ color: theme.colors.textSecondary, fontSize: 13 }}>
+                                Kurang
+                              </Text>
+                              <Text
+                                style={{ color: theme.colors.danger, fontSize: 14, fontWeight: '700' }}
+                              >
+                                {formatCurrency(tx.total_amount - parseCurrency(paidAmount))}
+                              </Text>
+                            </>
+                          ) : (
+                            <>
+                              <Text style={{ color: theme.colors.textSecondary, fontSize: 13 }}>
+                                Kembalian
+                              </Text>
+                              <Text
+                                style={{ color: theme.colors.success, fontSize: 14, fontWeight: '700' }}
+                              >
+                                {formatCurrency(parseCurrency(paidAmount) - tx.total_amount)}
+                              </Text>
+                            </>
+                          )}
+                        </View>
+                      ) : null}
+                    </>
+                  )}
+                </View>
+              </ScrollView>
+
+              <View style={{ flexDirection: 'row', gap: 10, marginTop: 16 }}>
+                <Button
+                  title="Batal"
+                  variant="secondary"
+                  fullWidth
+                  onPress={() => setConfirmPaidModal(false)}
+                />
+                <Button
+                  title="Lanjut"
+                  fullWidth
+                  onPress={confirmMarkPaid}
+                  disabled={
+                    selectedPaymentMethod === 'Tunai' &&
+                    (!paidAmount || parseCurrency(paidAmount) < tx.total_amount)
+                  }
+                />
+              </View>
+            </Pressable>
+          </Pressable>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );

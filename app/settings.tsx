@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
-import { Platform, Pressable, ScrollView, Text, View, PermissionsAndroid } from 'react-native';
+import { ActivityIndicator, Platform, Pressable, ScrollView, Text, View, PermissionsAndroid } from 'react-native';
 import { Button } from '../src/components/ui/Button';
 import { Card } from '../src/components/ui/Card';
 import { ConfirmDialog } from '../src/components/ui/ConfirmDialog';
@@ -12,6 +12,7 @@ import { useTheme } from '../src/contexts/ThemeContext';
 import { clearDatabase, resetDatabase } from '../src/database/db';
 import { backupService } from '../src/services/backupService';
 import { useAppStore } from '../src/store/useAppStore';
+import { InterstitialAd } from '../src/components/ui/AdBanner';
 
 let BLEPrinter: any = null;
 if (Platform.OS !== 'web') {
@@ -35,7 +36,6 @@ export default function SettingsScreen() {
     showToast,
     loadSettings,
     receiptPaperSize,
-    receiptFooter,
     setReceiptInfo,
     connectedPrinter,
     setConnectedPrinter,
@@ -45,20 +45,26 @@ export default function SettingsScreen() {
   const [address, setAddress] = useState(workshopAddress);
   const [phone, setPhone] = useState(workshopPhone);
   const [paperSize, setPaperSize] = useState(receiptPaperSize);
-  const [footer, setFooter] = useState(receiptFooter);
   const [confirmReset, setConfirmReset] = useState(false);
   const [confirmClear, setConfirmClear] = useState(false);
   const [busy, setBusy] = useState(false);
   const [btDevices, setBtDevices] = useState<any[]>([]);
   const [scanningBt, setScanningBt] = useState(false);
+  const [connectingMac, setConnectingMac] = useState<string | null>(null);
 
   useEffect(() => {
     setName(workshopName);
     setAddress(workshopAddress);
     setPhone(workshopPhone);
     setPaperSize(receiptPaperSize);
-    setFooter(receiptFooter);
-  }, [workshopName, workshopAddress, workshopPhone, receiptPaperSize, receiptFooter]);
+  }, [workshopName, workshopAddress, workshopPhone, receiptPaperSize]);
+
+  const workshopDirty =
+    name.trim() !== workshopName.trim() ||
+    address.trim() !== workshopAddress.trim() ||
+    phone.trim() !== workshopPhone.trim();
+
+  const receiptDirty = paperSize !== receiptPaperSize;
 
   const saveInfo = async () => {
     await setWorkshopInfo({ name: name.trim(), address: address.trim(), phone: phone.trim() });
@@ -70,6 +76,7 @@ export default function SettingsScreen() {
       setBusy(true);
       await backupService.exportBackup();
       showToast('Backup berhasil', 'success');
+      await InterstitialAd.show();
     } catch {
       showToast('Gagal backup', 'error');
     } finally {
@@ -143,8 +150,8 @@ export default function SettingsScreen() {
   };
 
   const connectToPrinter = async (mac: string, name: string) => {
-    if (!BLEPrinter) return;
-    setBusy(true);
+    if (!BLEPrinter || connectingMac) return;
+    setConnectingMac(mac);
     try {
       await BLEPrinter.connectPrinter(mac);
       await setConnectedPrinter({ name, mac });
@@ -153,7 +160,7 @@ export default function SettingsScreen() {
     } catch (e) {
       showToast('Gagal terhubung ke printer', 'error');
     } finally {
-      setBusy(false);
+      setConnectingMac(null);
     }
   };
 
@@ -176,7 +183,7 @@ export default function SettingsScreen() {
             onChangeText={setPhone}
             keyboardType="phone-pad"
           />
-          <Button title="Simpan" onPress={saveInfo} fullWidth />
+          <Button title="Simpan" onPress={saveInfo} fullWidth disabled={!workshopDirty} />
         </Card>
 
         <Text style={{ ...sectionBase, color: theme.colors.textSecondary }}>MANAJEMEN</Text>
@@ -209,7 +216,7 @@ export default function SettingsScreen() {
                 Kelola Karyawan
               </Text>
               <Text style={{ color: theme.colors.textMuted, fontSize: 12, marginTop: 2 }}>
-                Tambah/edit mekanik, kasir, admin
+                Tambah/edit mekanik dan kasir
               </Text>
             </View>
             <Ionicons name="chevron-forward" size={18} color={theme.colors.textMuted} />
@@ -229,23 +236,14 @@ export default function SettingsScreen() {
               '80mm': 'receipt',
             }}
           />
-          <Input
-            label="Pesan Footer (Opsional)"
-            value={footer}
-            onChangeText={setFooter}
-            placeholder="Terima kasih, barang tidak dapat dikembalikan."
-            multiline
-            numberOfLines={2}
-            style={{ textAlignVertical: 'top' }}
-          />
           <View style={{ marginTop: 8 }}>
             <Button
               title="Simpan Pengaturan Struk"
               onPress={async () => {
-                await setReceiptInfo({ paperSize, footer: footer.trim() });
+                await setReceiptInfo({ paperSize });
                 showToast('Pengaturan struk disimpan', 'success');
               }}
-              disabled={paperSize === receiptPaperSize && footer === receiptFooter}
+              disabled={!receiptDirty}
               fullWidth
             />
           </View>
@@ -286,26 +284,41 @@ export default function SettingsScreen() {
                   <Text style={{ fontSize: 12, fontWeight: 'bold', color: theme.colors.text, marginBottom: 8 }}>
                     Printer Ditemukan:
                   </Text>
-                  {btDevices.map((dev, i) => (
-                    <Pressable
-                      key={i}
-                      onPress={() => connectToPrinter(dev.inner_mac_address, dev.device_name)}
-                      style={{
-                        padding: 12,
-                        borderBottomWidth: 1,
-                        borderBottomColor: theme.colors.border,
-                        flexDirection: 'row',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                      }}
-                    >
-                      <View>
-                        <Text style={{ color: theme.colors.text, fontWeight: '600' }}>{dev.device_name}</Text>
-                        <Text style={{ color: theme.colors.textMuted, fontSize: 12 }}>{dev.inner_mac_address}</Text>
-                      </View>
-                      <Ionicons name="link" size={20} color={theme.colors.primary} />
-                    </Pressable>
-                  ))}
+                  {btDevices.map((dev, i) => {
+                    const mac = dev.inner_mac_address as string;
+                    const isConnecting = connectingMac === mac;
+                    return (
+                      <Pressable
+                        key={i}
+                        onPress={() => connectToPrinter(mac, dev.device_name)}
+                        disabled={!!connectingMac}
+                        style={{
+                          padding: 12,
+                          borderBottomWidth: 1,
+                          borderBottomColor: theme.colors.border,
+                          flexDirection: 'row',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          opacity: connectingMac && !isConnecting ? 0.5 : 1,
+                        }}
+                      >
+                        <View style={{ flex: 1 }}>
+                          <Text style={{ color: theme.colors.text, fontWeight: '600' }}>{dev.device_name}</Text>
+                          <Text style={{ color: theme.colors.textMuted, fontSize: 12 }}>{mac}</Text>
+                          {isConnecting ? (
+                            <Text style={{ color: theme.colors.accent, fontSize: 12, marginTop: 4 }}>
+                              Menghubungkan...
+                            </Text>
+                          ) : null}
+                        </View>
+                        {isConnecting ? (
+                          <ActivityIndicator size="small" color={theme.colors.accent} />
+                        ) : (
+                          <Ionicons name="link" size={20} color={theme.colors.primary} />
+                        )}
+                      </Pressable>
+                    );
+                  })}
                 </View>
               )}
             </Card>

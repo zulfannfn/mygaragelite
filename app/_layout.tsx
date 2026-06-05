@@ -11,6 +11,7 @@ import { Toast } from '../src/components/ui/Toast';
 import { darkTheme, lightTheme } from '../src/constants/theme';
 import { ThemeProvider } from '../src/contexts/ThemeContext';
 import { initDatabase } from '../src/database/db';
+import { initializeAds } from '../src/services/adsInit';
 import { useAppStore } from '../src/store/useAppStore';
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
@@ -27,6 +28,7 @@ export default function RootLayout() {
         await initDatabase();
         await loadSettings();
         setReady(true);
+        initializeAds().catch(() => {});
       } catch (e: any) {
         setError(e?.message ?? 'Gagal inisialisasi database');
         setReady(true);

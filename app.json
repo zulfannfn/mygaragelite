@@ -12,6 +12,7 @@
       "supportsTablet": true
     },
     "android": {
+      "versionCode": 1,
       "package": "com.zulfan.mygaragelite",
       "permissions": [
         "android.permission.BLUETOOTH",
@@ -36,15 +37,11 @@
     "plugins": [
       "expo-router",
       [
-        "expo-splash-screen",
+        "react-native-google-mobile-ads",
         {
-          "image": "./assets/images/splash-icon.png",
-          "imageWidth": 200,
-          "resizeMode": "contain",
-          "backgroundColor": "#ffffff",
-          "dark": {
-            "backgroundColor": "#000000"
-          }
+          "androidAppId": "ca-app-pub-5264878264518462~8197893093",
+          "iosAppId": "ca-app-pub-5264878264518462~8197893093",
+          "delayAppMeasurementInit": true
         }
       ]
     ],

@@ -12,9 +12,10 @@ import { employeeService } from '../src/services/employeeService';
 import { useAppStore } from '../src/store/useAppStore';
 import { useEmployeeStore } from '../src/store/useEmployeeStore';
 import { EmployeeRole } from '../src/types';
+import { InterstitialAd } from '../src/components/ui/AdBanner';
 import { isEmpty } from '../src/utils/validation';
 
-const ROLES: EmployeeRole[] = ['Mekanik', 'Kasir', 'Admin'];
+const ROLES: EmployeeRole[] = ['Mekanik', 'Kasir'];
 
 export default function EmployeeForm() {
   const router = useRouter();
@@ -37,7 +38,7 @@ export default function EmployeeForm() {
       employeeService.getById(id).then((e) => {
         if (!e) return;
         setName(e.name);
-        setRole(e.role);
+        setRole(e.role === 'Admin' ? 'Mekanik' : e.role);
         setPhone(e.phone);
         setIsActive(e.is_active === 1);
       });
@@ -67,6 +68,7 @@ export default function EmployeeForm() {
       } else {
         await add(input);
         showToast('Karyawan ditambahkan', 'success');
+        await InterstitialAd.show();
       }
       router.back();
     } catch {
@@ -91,7 +93,7 @@ export default function EmployeeForm() {
     <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
       <ScreenHeader title={isEdit ? 'Edit Karyawan' : 'Karyawan Baru'} showBack />
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior="padding"
         style={{ flex: 1 }}
       >
         <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 40 }}>
@@ -110,7 +112,6 @@ export default function EmployeeForm() {
             optionIcons={{
               Mekanik: 'construct',
               Kasir: 'cash',
-              Admin: 'shield-checkmark',
             }}
           />
           <Input

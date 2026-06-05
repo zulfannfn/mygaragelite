@@ -88,6 +88,51 @@ export const transactionService = {
     return await db.getAllAsync<Transaction>(sql, ...params);
   },
 
+  /** Loads transactions with service_items and spareparts (for export). */
+  async getAllWithLineItems(filters?: {
+    search?: string;
+    status?: TransactionStatus;
+    type?: TransactionType;
+    startDate?: number;
+    endDate?: number;
+  }): Promise<Transaction[]> {
+    const transactions = await this.getAll(filters);
+    if (transactions.length === 0) return [];
+
+    const db = await getDatabase();
+    const ids = transactions.map((t) => t.id);
+    const placeholders = ids.map(() => '?').join(',');
+
+    const allServices = await db.getAllAsync<ServiceItem>(
+      `SELECT * FROM service_items WHERE transaction_id IN (${placeholders}) ORDER BY service_name`,
+      ...ids
+    );
+    const allSpareparts = await db.getAllAsync<TransactionSparepart>(
+      `SELECT * FROM transaction_spareparts WHERE transaction_id IN (${placeholders}) ORDER BY sparepart_name`,
+      ...ids
+    );
+
+    const servicesByTx = new Map<string, ServiceItem[]>();
+    const sparepartsByTx = new Map<string, TransactionSparepart[]>();
+
+    for (const item of allServices) {
+      const list = servicesByTx.get(item.transaction_id) ?? [];
+      list.push(item);
+      servicesByTx.set(item.transaction_id, list);
+    }
+    for (const item of allSpareparts) {
+      const list = sparepartsByTx.get(item.transaction_id) ?? [];
+      list.push(item);
+      sparepartsByTx.set(item.transaction_id, list);
+    }
+
+    return transactions.map((t) => ({
+      ...t,
+      service_items: servicesByTx.get(t.id) ?? [],
+      spareparts: sparepartsByTx.get(t.id) ?? [],
+    }));
+  },
+
   async getById(id: string): Promise<Transaction | null> {
     const db = await getDatabase();
     const tx = await db.getFirstAsync<Transaction>(
@@ -200,13 +245,17 @@ export const transactionService = {
   async updateStatus(
     id: string,
     status: TransactionStatus,
-    paymentMethod?: PaymentMethod | null
+    paymentMethod?: PaymentMethod | null,
+    paidAmount?: number,
+    changeAmount?: number
   ): Promise<void> {
     const db = await getDatabase();
     await db.runAsync(
-      'UPDATE transactions SET status = ?, payment_method = ?, updated_at = ? WHERE id = ?',
+      'UPDATE transactions SET status = ?, payment_method = ?, paid_amount = ?, change_amount = ?, updated_at = ? WHERE id = ?',
       status,
       paymentMethod ?? null,
+      paidAmount ?? 0,
+      changeAmount ?? 0,
       Date.now(),
       id
     );

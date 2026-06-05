@@ -21,10 +21,20 @@ function MiniBarChart({ data, theme }: { data: ReportData[]; theme: any }) {
   const barWidth = 16;
   const gap = 4;
 
-  // Extract month from date (format: MM/YYYY or similar)
+  // Extract month name from date (format: MM/YYYY or similar)
+  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
   const getMonth = (date: string) => {
+    // If format is like "Mei 26" or "Mei 2026", split by space and return only the month name
+    const spaceParts = date.split(' ');
+    if (spaceParts.length > 0 && isNaN(parseInt(spaceParts[0], 10))) {
+      return spaceParts[0];
+    }
     const parts = date.split('/');
-    return parts[0] || date; // First part is month (MM/YYYY format)
+    const monthNum = parseInt(parts[0], 10);
+    if (!isNaN(monthNum) && monthNum >= 1 && monthNum <= 12) {
+      return monthNames[monthNum - 1];
+    }
+    return parts[0] || date;
   };
 
   const barColor = '#87CEEB'; // Light blue color that works in both modes
@@ -280,8 +290,6 @@ export default function Dashboard() {
         />
       </View>
 
-      <AdBanner />
-
       {/* Perhatian — Pending Transactions */}
       <View style={{ paddingHorizontal: 20, marginTop: 8, marginBottom: 12 }}>
         <Text style={{ color: theme.colors.text, fontSize: 16, fontWeight: '700' }}>
@@ -356,6 +364,8 @@ export default function Dashboard() {
           ))
         )}
       </View>
+
+      <AdBanner />
 
       </ScrollView>
 

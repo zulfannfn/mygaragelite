@@ -11,6 +11,7 @@ import { useTheme } from '../src/contexts/ThemeContext';
 import { sparepartService } from '../src/services/sparepartService';
 import { useAppStore } from '../src/store/useAppStore';
 import { useSparepartStore } from '../src/store/useSparepartStore';
+import { InterstitialAd } from '../src/components/ui/AdBanner';
 import { parseCurrency } from '../src/utils/currency';
 import { isEmpty } from '../src/utils/validation';
 
@@ -37,7 +38,7 @@ export default function SparepartForm() {
 
   useEffect(() => {
     sparepartService.getUniqueCategories().then((cats) => {
-      const customs = cats.filter(c => !SPAREPART_CATEGORIES.includes(c));
+      const customs = cats.filter(c => !(SPAREPART_CATEGORIES as readonly string[]).includes(c));
       setExistingCustomCategories(customs);
     });
 
@@ -46,7 +47,7 @@ export default function SparepartForm() {
         if (!s) return;
         setName(s.name);
         setCategory(s.category);
-        if (!SPAREPART_CATEGORIES.includes(s.category)) {
+        if (!(SPAREPART_CATEGORIES as readonly string[]).includes(s.category)) {
           // If the loaded sparepart uses a custom category,
           // we can just set category to that value since it's now in the list.
           // Wait, if it's in the list, we don't need to show custom category input,
@@ -85,6 +86,7 @@ export default function SparepartForm() {
       if (isEdit && id) {
         await update(id, input);
         showToast('Sparepart diperbarui', 'success');
+        await InterstitialAd.show();
       } else {
         await add(input);
         showToast('Sparepart ditambahkan', 'success');
@@ -109,10 +111,10 @@ export default function SparepartForm() {
     <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
       <ScreenHeader title={isEdit ? 'Edit Sparepart' : 'Sparepart Baru'} showBack />
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior="padding"
         style={{ flex: 1 }}
       >
-        <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 40 + (Platform.OS === 'android' ? 48 : 34), gap: 16 }}>
+        <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 120, gap: 16 }} keyboardShouldPersistTaps="handled">
           <Input
             label="Nama Sparepart *"
             value={name}

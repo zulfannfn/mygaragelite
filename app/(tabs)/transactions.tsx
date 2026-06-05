@@ -452,7 +452,7 @@ export default function TransactionsScreen() {
         animationType="fade"
         onRequestClose={() => setFilterModalOpen(false)}
       >
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
+        <KeyboardAvoidingView behavior="padding" style={{ flex: 1 }}>
         <Pressable
           style={{
             flex: 1,

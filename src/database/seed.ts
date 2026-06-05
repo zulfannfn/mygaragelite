@@ -67,11 +67,23 @@ export async function seedDatabaseIfEmpty(
   db: SQLite.SQLiteDatabase,
   force = false
 ): Promise<void> {
-  const row = (await db.getFirstAsync<{ count: number }>(
+  const customerRow = (await db.getFirstAsync<{ count: number }>(
     'SELECT COUNT(*) as count FROM customers'
   )) ?? { count: 0 };
 
-  if (!force && row.count > 0) return;
+  const serviceRow = (await db.getFirstAsync<{ count: number }>(
+    'SELECT COUNT(*) as count FROM services'
+  )) ?? { count: 0 };
+
+  const employeeRow = (await db.getFirstAsync<{ count: number }>(
+    'SELECT COUNT(*) as count FROM employees'
+  )) ?? { count: 0 };
+
+  const sparepartRow = (await db.getFirstAsync<{ count: number }>(
+    'SELECT COUNT(*) as count FROM spareparts'
+  )) ?? { count: 0 };
+
+  if (!force && customerRow.count > 0 && serviceRow.count > 0 && employeeRow.count > 0 && sparepartRow.count > 0) return;
 
   const now = Date.now();
 
@@ -96,50 +108,90 @@ export async function seedDatabaseIfEmpty(
     'onboarding_done',
     'false'
   );
+  await db.runAsync(
+    'INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)',
+    'receipt_paper_size',
+    '80mm'
+  );
 
   // Employees
   const employeeIds: string[] = [];
-  for (const e of DUMMY_EMPLOYEES) {
-    const id = generateId();
-    employeeIds.push(id);
-    await db.runAsync(
-      `INSERT INTO employees (id, name, role, phone, is_active, created_at, updated_at)
-       VALUES (?, ?, ?, ?, 1, ?, ?)`,
-      id, e.name, e.role, e.phone, now, now
+  let cashierId: string | null = null;
+  let cashierName = 'Kasir';
+  let mechanicIdList: string[] = [];
+
+  if (employeeRow.count === 0) {
+    for (const e of DUMMY_EMPLOYEES) {
+      const id = generateId();
+      employeeIds.push(id);
+      if (e.role === 'Kasir') {
+        cashierId = id;
+        cashierName = e.name;
+      }
+      if (e.role === 'Mekanik') mechanicIdList.push(id);
+      await db.runAsync(
+        `INSERT INTO employees (id, name, role, phone, is_active, created_at, updated_at)
+         VALUES (?, ?, ?, ?, 1, ?, ?)`,
+        id, e.name, e.role, e.phone, now, now
+      );
+    }
+  } else {
+    const existingEmployees = await db.getAllAsync<{ id: string; role: string; name: string }>(
+      'SELECT id, role, name FROM employees'
     );
+    employeeIds.push(...existingEmployees.map((e) => e.id));
+    const cashier = existingEmployees.find((e) => e.role === 'Kasir');
+    cashierId = cashier?.id ?? null;
+    cashierName = cashier?.name ?? 'Kasir';
+    mechanicIdList = existingEmployees.filter((e) => e.role === 'Mekanik').map((e) => e.id);
   }
-  const mechanicIds = employeeIds.slice(0, 2);
 
   // Customers
   const customerIds: string[] = [];
-  for (const c of DUMMY_CUSTOMERS) {
-    const id = generateId();
-    customerIds.push(id);
-    await db.runAsync(
-      `INSERT INTO customers (id, name, phone, plate_number, vehicle_type, vehicle_brand, notes, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      id, c.name, c.phone, c.plate, c.type, c.brand, c.notes, now, now
-    );
+  if (customerRow.count === 0) {
+    for (const c of DUMMY_CUSTOMERS) {
+      const id = generateId();
+      customerIds.push(id);
+      await db.runAsync(
+        `INSERT INTO customers (id, name, phone, plate_number, vehicle_type, vehicle_brand, notes, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        id, c.name, c.phone, c.plate, c.type, c.brand, c.notes, now, now
+      );
+    }
+  } else {
+    // Get existing customer IDs
+    const existingCustomers = await db.getAllAsync<{ id: string }>('SELECT id FROM customers LIMIT 10');
+    customerIds.push(...existingCustomers.map(c => c.id));
   }
 
   // Services
-  for (const s of SERVICE_PRESETS) {
-    await db.runAsync(
-      `INSERT INTO services (id, name, price, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`,
-      generateId(), s[0], s[1], now, now
-    );
+  if (serviceRow.count === 0) {
+    for (const s of SERVICE_PRESETS) {
+      await db.runAsync(
+        `INSERT INTO services (id, name, price, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`,
+        generateId(), s[0], s[1], now, now
+      );
+    }
   }
 
   // Spareparts
   const sparepartMap: Record<string, { id: string; name: string; price: number }> = {};
-  for (const s of DUMMY_SPAREPARTS) {
-    const id = generateId();
-    sparepartMap[s.name] = { id, name: s.name, price: s.sell };
-    await db.runAsync(
-      `INSERT INTO spareparts (id, name, category, stock, min_stock, buy_price, sell_price, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      id, s.name, s.cat, s.stock, s.min, s.buy, s.sell, now, now
-    );
+  if (sparepartRow.count === 0) {
+    for (const s of DUMMY_SPAREPARTS) {
+      const id = generateId();
+      sparepartMap[s.name] = { id, name: s.name, price: s.sell };
+      await db.runAsync(
+        `INSERT INTO spareparts (id, name, category, stock, min_stock, buy_price, sell_price, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        id, s.name, s.cat, s.stock, s.min, s.buy, s.sell, now, now
+      );
+    }
+  } else {
+    // Get existing spareparts
+    const existingSpareparts = await db.getAllAsync<{ id: string; name: string; sell_price: number }>('SELECT id, name, sell_price FROM spareparts LIMIT 20');
+    for (const sp of existingSpareparts) {
+      sparepartMap[sp.name] = { id: sp.id, name: sp.name, price: sp.sell_price };
+    }
   }
 
   // Sample transactions: 2 today, plus several in last 30 days
@@ -190,14 +242,36 @@ export async function seedDatabaseIfEmpty(
     const status = i === 0 ? 'pending' : 'paid';
     const payment = status === 'paid' ? (Math.random() < 0.7 ? 'Tunai' : 'Transfer') : null;
 
-    const mechanicId = mechanicIds[i % mechanicIds.length];
+    const mechanicId = mechanicIdList[i % mechanicIdList.length] ?? null;
     const complaint = COMPLAINTS[i % COMPLAINTS.length];
     const recommendation = i % 2 === 0 ? RECOMMENDATIONS[i % RECOMMENDATIONS.length] : '';
+    const paidAmount = status === 'paid' ? total : 0;
+    const changeAmount = status === 'paid' && payment === 'Tunai' ? Math.floor(Math.random() * 5000) : 0;
 
     await db.runAsync(
-      `INSERT INTO transactions (id, customer_id, mechanic_id, mechanic_notes, complaint, recommendation, status, payment_method, total_service, total_sparepart, total_amount, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      txId, customerId, mechanicId, '', complaint, recommendation, status, payment, totalService, totalSparepart, total, ts, ts
+      `INSERT INTO transactions (
+        id, customer_id, mechanic_id, cashier_id, cashier_name, mechanic_notes, complaint, recommendation,
+        type, status, payment_method, paid_amount, change_amount,
+        total_service, total_sparepart, total_amount, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      txId,
+      customerId,
+      mechanicId,
+      cashierId,
+      cashierName,
+      '',
+      complaint,
+      recommendation,
+      'service',
+      status,
+      payment,
+      paidAmount,
+      changeAmount,
+      totalService,
+      totalSparepart,
+      total,
+      ts,
+      ts
     );
 
     for (const si of serviceItemsToInsert) {
@@ -210,6 +284,73 @@ export async function seedDatabaseIfEmpty(
       await db.runAsync(
         `INSERT INTO transaction_spareparts (id, transaction_id, sparepart_id, sparepart_name, quantity, sell_price) VALUES (?, ?, ?, ?, ?, ?)`,
         generateId(), txId, sp.id, sp.name, sp.qty, sp.price
+      );
+    }
+  }
+
+  // Retail (kasir) transactions — sparepart only, lunas
+  for (let i = 0; i < 6; i++) {
+    const daysAgo = i < 2 ? 0 : Math.floor(Math.random() * 14) + 1;
+    const txDate = new Date(today);
+    txDate.setDate(txDate.getDate() - daysAgo);
+    txDate.setHours(9 + Math.floor(Math.random() * 9), Math.floor(Math.random() * 60), 0, 0);
+    const ts = txDate.getTime();
+    const txId = generateId();
+
+    const numSpareparts = 1 + Math.floor(Math.random() * 3);
+    const usedSp = new Set<number>();
+    let totalSparepart = 0;
+    const spItems: { id: string; name: string; price: number; qty: number }[] = [];
+    for (let j = 0; j < numSpareparts; j++) {
+      let idx = Math.floor(Math.random() * sparepartList.length);
+      while (usedSp.has(idx)) idx = (idx + 1) % sparepartList.length;
+      usedSp.add(idx);
+      const sp = sparepartList[idx];
+      const qty = 1 + Math.floor(Math.random() * 2);
+      spItems.push({ id: sp.id, name: sp.name, price: sp.price, qty });
+      totalSparepart += sp.price * qty;
+    }
+
+    const payment = i % 3 === 0 ? 'QRIS' : i % 2 === 0 ? 'Transfer' : 'Tunai';
+    const paidAmount = totalSparepart + (payment === 'Tunai' ? 5000 : 0);
+    const changeAmount = payment === 'Tunai' ? paidAmount - totalSparepart : 0;
+    const customerId = i % 3 === 0 ? null : customerIds[i % customerIds.length];
+
+    await db.runAsync(
+      `INSERT INTO transactions (
+        id, customer_id, mechanic_id, cashier_id, cashier_name, mechanic_notes, complaint, recommendation,
+        type, status, payment_method, paid_amount, change_amount,
+        total_service, total_sparepart, total_amount, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      txId,
+      customerId,
+      null,
+      cashierId,
+      cashierName,
+      '',
+      '',
+      '',
+      'retail',
+      'paid',
+      payment,
+      paidAmount,
+      changeAmount,
+      0,
+      totalSparepart,
+      totalSparepart,
+      ts,
+      ts
+    );
+
+    for (const sp of spItems) {
+      await db.runAsync(
+        `INSERT INTO transaction_spareparts (id, transaction_id, sparepart_id, sparepart_name, quantity, sell_price) VALUES (?, ?, ?, ?, ?, ?)`,
+        generateId(),
+        txId,
+        sp.id,
+        sp.name,
+        sp.qty,
+        sp.price
       );
     }
   }

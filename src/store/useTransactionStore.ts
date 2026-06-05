@@ -22,7 +22,7 @@ interface TransactionState {
   load: () => Promise<void>;
   loadMore: () => Promise<void>;
   add: (input: TransactionInput) => Promise<Transaction>;
-  updateStatus: (id: string, status: TransactionStatus, payment?: PaymentMethod | null) => Promise<void>;
+  updateStatus: (id: string, status: TransactionStatus, payment?: PaymentMethod | null, paidAmount?: number, changeAmount?: number) => Promise<void>;
   remove: (id: string) => Promise<void>;
 }
 
@@ -60,8 +60,8 @@ export const useTransactionStore = create<TransactionState>((set, get) => ({
     await get().load();
     return tx;
   },
-  updateStatus: async (id, status, payment) => {
-    await transactionService.updateStatus(id, status, payment);
+  updateStatus: async (id, status, payment, paidAmount, changeAmount) => {
+    await transactionService.updateStatus(id, status, payment, paidAmount, changeAmount);
     await get().load();
   },
   remove: async (id) => {

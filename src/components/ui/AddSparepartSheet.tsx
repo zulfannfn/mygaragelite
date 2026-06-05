@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { FlatList, Modal, Pressable, Text, View } from 'react-native';
+import { Alert, FlatList, Modal, Pressable, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../contexts/ThemeContext';
 import { sparepartService } from '../../services/sparepartService';
@@ -32,8 +32,13 @@ export function AddSparepartSheet({ visible, onClose, onPick }: Props) {
   // Custom Form states
   const [showCustomForm, setShowCustomForm] = useState(false);
   const [customName, setCustomName] = useState('');
-  const [customPrice, setCustomPrice] = useState('');
+  const [customBuyPrice, setCustomBuyPrice] = useState('');
+  const [customSellPrice, setCustomSellPrice] = useState('');
   const [customStock, setCustomStock] = useState('1');
+  const [customMinStock, setCustomMinStock] = useState('0');
+  const [customCategory, setCustomCategory] = useState('');
+  const [showCategoryPicker, setShowCategoryPicker] = useState(false);
+  const [newCategory, setNewCategory] = useState('');
 
   const loadSpareparts = useCallback(async (offset = 0) => {
     if (offset === 0) {
@@ -82,6 +87,11 @@ export function AddSparepartSheet({ visible, onClose, onPick }: Props) {
     [items, search]
   );
 
+  const categories = useMemo(() => {
+    const uniqueCategories = [...new Set(items.map((s) => s.category))];
+    return uniqueCategories.sort();
+  }, [items]);
+
   const submit = () => {
     if (!selected) return;
     onPick(selected, Math.max(1, qty));
@@ -91,22 +101,30 @@ export function AddSparepartSheet({ visible, onClose, onPick }: Props) {
   };
 
   const submitCustom = async () => {
-    if (!customName.trim()) return;
+    if (!customName.trim() || !customBuyPrice.trim() || !customSellPrice.trim() || !customStock.trim()) {
+      Alert.alert('Peringatan', 'Mohon lengkapi semua data');
+      return;
+    }
     try {
       const stockVal = Math.max(0, parseInt(customStock) || 0);
+      const minStockVal = Math.max(0, parseInt(customMinStock) || 0);
       const newSp = await sparepartService.create({
         name: customName.trim(),
-        category: 'Umum',
-        buy_price: 0,
-        sell_price: Number(customPrice.replace(/[^0-9]/g, '')) || 0,
+        category: customCategory.trim() || 'Umum',
+        buy_price: Number(customBuyPrice.replace(/[^0-9]/g, '')) || 0,
+        sell_price: Number(customSellPrice.replace(/[^0-9]/g, '')) || 0,
         stock: stockVal,
+        min_stock: minStockVal,
       });
       // Simulate selection to add right away
       onPick(newSp, 1);
       setShowCustomForm(false);
       setCustomName('');
-      setCustomPrice('');
+      setCustomBuyPrice('');
+      setCustomSellPrice('');
       setCustomStock('1');
+      setCustomMinStock('0');
+      setCustomCategory('');
       setSearch('');
     } catch (e) {
       console.error('Error create custom sparepart', e);
@@ -131,7 +149,7 @@ export function AddSparepartSheet({ visible, onClose, onPick }: Props) {
             borderTopRightRadius: theme.radius.xl,
             paddingTop: 8,
             paddingBottom: Math.max(28, insets.bottom + 16),
-            height: '85%',
+            height: '90%',
           }}
         >
           <View
@@ -201,20 +219,54 @@ export function AddSparepartSheet({ visible, onClose, onPick }: Props) {
                     onChangeText={setCustomName}
                     placeholder="Nama Sparepart"
                   />
+                  <Pressable
+                    onPress={() => setShowCategoryPicker(true)}
+                    style={{
+                      backgroundColor: theme.colors.background,
+                      borderRadius: theme.radius.md,
+                      borderWidth: 1,
+                      borderColor: theme.colors.border,
+                      paddingHorizontal: 16,
+                      paddingVertical: 12,
+                      marginBottom: 12,
+                    }}
+                  >
+                    <Text style={{ color: customCategory ? theme.colors.text : theme.colors.textSecondary }}>
+                      {customCategory || 'Pilih Kategori Sparepart'}
+                    </Text>
+                  </Pressable>
                   <View style={{ flexDirection: 'row', gap: 12 }}>
                     <View style={{ flex: 1 }}>
                       <Input
-                        value={customPrice}
-                        onChangeText={setCustomPrice}
-                        placeholder="Harga (Rp)"
+                        value={customBuyPrice}
+                        onChangeText={setCustomBuyPrice}
+                        placeholder="Harga Beli (Rp)"
                         keyboardType="numeric"
                       />
                     </View>
-                    <View style={{ width: 80 }}>
+                    <View style={{ flex: 1 }}>
+                      <Input
+                        value={customSellPrice}
+                        onChangeText={setCustomSellPrice}
+                        placeholder="Harga Jual (Rp)"
+                        keyboardType="numeric"
+                      />
+                    </View>
+                  </View>
+                  <View style={{ flexDirection: 'row', gap: 12 }}>
+                    <View style={{ flex: 1 }}>
                       <Input
                         value={customStock}
                         onChangeText={setCustomStock}
                         placeholder="Stok"
+                        keyboardType="numeric"
+                      />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Input
+                        value={customMinStock}
+                        onChangeText={setCustomMinStock}
+                        placeholder="Minimum Stok"
                         keyboardType="numeric"
                       />
                     </View>
@@ -223,7 +275,7 @@ export function AddSparepartSheet({ visible, onClose, onPick }: Props) {
                     title="Tambah Sparepart Baru"
                     fullWidth
                     onPress={submitCustom}
-                    disabled={!customName.trim()}
+                    disabled={!customName.trim() || !customBuyPrice.trim() || !customSellPrice.trim() || !customStock.trim()}
                     icon={<Ionicons name="add-circle" size={18} color="#fff" />}
                   />
                 </View>
@@ -465,6 +517,129 @@ export function AddSparepartSheet({ visible, onClose, onPick }: Props) {
           )}
         </Pressable>
       </Pressable>
+
+      {/* Category Picker Modal */}
+      <Modal visible={showCategoryPicker} transparent animationType="slide">
+        <Pressable
+          onPress={() => setShowCategoryPicker(false)}
+          style={{
+            flex: 1,
+            backgroundColor: 'rgba(0,0,0,0.6)',
+            justifyContent: 'flex-end',
+          }}
+        >
+          <Pressable
+            onPress={(e) => e.stopPropagation()}
+            style={{
+              backgroundColor: theme.colors.surface,
+              borderTopLeftRadius: theme.radius.xl,
+              borderTopRightRadius: theme.radius.xl,
+              paddingTop: 8,
+              paddingBottom: Math.max(28, insets.bottom + 16),
+              height: '90%',
+            }}
+          >
+            <View
+              style={{
+                width: 40,
+                height: 4,
+                borderRadius: 2,
+                backgroundColor: theme.colors.borderLight,
+                alignSelf: 'center',
+                marginBottom: 12,
+              }}
+            />
+
+            <View style={{ paddingHorizontal: 20, marginBottom: 12 }}>
+              <Text style={{ color: theme.colors.text, fontSize: 18, fontWeight: '800' }}>
+                Pilih Kategori
+              </Text>
+            </View>
+
+            {/* Add new category section at the top */}
+            <View style={{ paddingHorizontal: 16, marginBottom: 12 }}>
+              <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+                <View style={{ flex: 1 }}>
+                  <Input
+                    value={newCategory}
+                    onChangeText={setNewCategory}
+                    placeholder="Kategori baru..."
+                    containerStyle={{ marginBottom: 0 }}
+                  />
+                </View>
+                <Pressable
+                  onPress={() => {
+                    if (newCategory.trim()) {
+                      setCustomCategory(newCategory.trim());
+                      setNewCategory('');
+                      setShowCategoryPicker(false);
+                    }
+                  }}
+                  disabled={!newCategory.trim()}
+                  style={({ pressed }) => ({
+                    width: 48,
+                    height: 48,
+                    borderRadius: theme.radius.md,
+                    backgroundColor: newCategory.trim() ? theme.colors.accent : theme.colors.card,
+                    borderWidth: 1,
+                    borderColor: newCategory.trim() ? theme.colors.accent : theme.colors.border,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    opacity: pressed ? 0.7 : 1,
+                  })}
+                >
+                  <Ionicons
+                    name="add"
+                    size={20}
+                    color={newCategory.trim() ? '#fff' : theme.colors.textSecondary}
+                  />
+                </Pressable>
+              </View>
+            </View>
+
+            <FlatList
+              data={categories}
+              keyExtractor={(item) => item}
+              contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 12 }}
+              renderItem={({ item }) => (
+                <Pressable
+                  onPress={() => {
+                    setCustomCategory(item);
+                    setShowCategoryPicker(false);
+                  }}
+                  style={{
+                    padding: 14,
+                    backgroundColor: customCategory === item ? theme.colors.accent + '15' : theme.colors.card,
+                    borderRadius: theme.radius.lg,
+                    borderWidth: 1,
+                    borderColor: customCategory === item ? theme.colors.accent : theme.colors.border,
+                    marginBottom: 8,
+                  }}
+                >
+                  <Text
+                    style={{
+                      color: customCategory === item ? theme.colors.accent : theme.colors.text,
+                      fontSize: 15,
+                      fontWeight: '600',
+                    }}
+                  >
+                    {item}
+                  </Text>
+                </Pressable>
+              )}
+            />
+
+            <View style={{ paddingHorizontal: 16, paddingBottom: 16 }}>
+              <Button
+                title="Tutup"
+                variant="ghost"
+                fullWidth
+                onPress={() => setShowCategoryPicker(false)}
+              />
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </Modal>
   );
 }

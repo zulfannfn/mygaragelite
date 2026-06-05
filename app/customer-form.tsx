@@ -12,6 +12,7 @@ import { customerService } from '../src/services/customerService';
 import { useAppStore } from '../src/store/useAppStore';
 import { useCustomerStore } from '../src/store/useCustomerStore';
 import { VehicleType } from '../src/types';
+import { InterstitialAd } from '../src/components/ui/AdBanner';
 import { isEmpty } from '../src/utils/validation';
 
 export default function CustomerForm() {
@@ -68,6 +69,7 @@ export default function CustomerForm() {
       if (isEdit && id) {
         await update(id, input);
         showToast('Pelanggan diperbarui', 'success');
+        await InterstitialAd.show();
       } else {
         const createdCustomer = await add(input);
         useAppStore.getState().setLastAddedCustomerId(createdCustomer.id);
@@ -93,10 +95,10 @@ export default function CustomerForm() {
     <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
       <ScreenHeader title={isEdit ? 'Edit Pelanggan' : 'Pelanggan Baru'} showBack />
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior="padding"
         style={{ flex: 1 }}
       >
-        <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 40, gap: 16 }}>
+        <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 120, gap: 16 }} keyboardShouldPersistTaps="handled">
           <Input
             label="Nama Pelanggan *"
             value={name}

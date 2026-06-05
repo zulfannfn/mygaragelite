@@ -1,10 +1,12 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, ScrollView, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { InterstitialAd } from '../src/components/ui/AdBanner';
 import { theme } from '../src/constants/theme';
 import { receiptService } from '../src/services/receiptService';
+import { handleReceiptPrintError } from '../src/utils/printerAlert';
 import { settingsService } from '../src/services/settingsService';
 import { transactionService } from '../src/services/transactionService';
 import { useAppStore } from '../src/store/useAppStore';
@@ -46,18 +48,19 @@ export default function ReceiptPage() {
     if (!targetTx || printing) return;
     setPrinting(true);
     try {
-      await receiptService.printPdf(targetTx, receiptType);
-      if (connectedPrinter) {
+      const method = await receiptService.printPdf(targetTx, receiptType);
+      if (method === 'bluetooth') {
         Alert.alert('Berhasil', 'Struk berhasil dikirim ke printer!');
       }
-    } catch (e: any) {
-      Alert.alert('Gagal Cetak', e?.message ?? 'Terjadi kesalahan saat mencetak.');
+    } catch (e: unknown) {
+      handleReceiptPrintError(e, router);
     } finally {
       setPrinting(false);
     }
   };
 
-  const handleClose = () => {
+  const handleClose = async () => {
+    await InterstitialAd.show();
     router.back();
   };
 

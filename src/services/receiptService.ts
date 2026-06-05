@@ -18,6 +18,17 @@ if (Platform.OS !== 'web') {
   }
 }
 
+export type PrintMethod = 'bluetooth' | 'pdf';
+
+export class PrinterPrintError extends Error {
+  constructor(
+    message = 'Gagal mengirim struk ke printer. Pastikan printer menyala dan terhubung.'
+  ) {
+    super(message);
+    this.name = 'PrinterPrintError';
+  }
+}
+
 export interface ShopInfo {
   name: string;
   address: string;
@@ -32,7 +43,7 @@ async function getShopInfo(override?: Partial<ShopInfo>): Promise<ShopInfo> {
     name: override?.name ?? all.workshop_name ?? 'MyGarage Bengkel',
     address: override?.address ?? all.workshop_address ?? '',
     phone: override?.phone ?? all.workshop_phone ?? '',
-    paperSize: all.receipt_paper_size ?? 'A4',
+    paperSize: all.receipt_paper_size ?? '80mm',
     footer: all.receipt_footer ?? '',
   };
 }
@@ -319,22 +330,33 @@ export const receiptService = {
     </html>`;
   },
 
-  async printPdf(tx: Transaction, receiptType: 'tagihan' | 'diterima' = 'tagihan', shopOverride?: Partial<ShopInfo>): Promise<void> {
+  async printPdf(
+    tx: Transaction,
+    receiptType: 'tagihan' | 'diterima' = 'tagihan',
+    shopOverride?: Partial<ShopInfo>
+  ): Promise<PrintMethod> {
     const store = useAppStore.getState();
     const connectedPrinter = store.connectedPrinter;
-    
+    const shop = await getShopInfo(shopOverride);
+    const wantsBluetooth =
+      !!connectedPrinter && shop.paperSize !== 'A4' && Platform.OS !== 'web';
+
+    if (wantsBluetooth && !BLEPrinter) {
+      throw new PrinterPrintError(
+        'Modul printer tidak tersedia. Hubungkan ulang printer di Pengaturan.'
+      );
+    }
+
     if (connectedPrinter && BLEPrinter && Platform.OS !== 'web') {
-      const shop = await getShopInfo(shopOverride);
       const customer = tx.customer_id ? await customerService.getById(tx.customer_id) : null;
-      // Jika kertas diset A4, kita tidak perlu cetak via bluetooth thermal.
       if (shop.paperSize !== 'A4') {
         try {
-          // Init dan reconnect printer sebelum cetak
           await BLEPrinter.init();
           try {
             await BLEPrinter.connectPrinter(connectedPrinter.mac);
-          } catch (_connectErr) {
-            // Abaikan jika sudah terkoneksi
+          } catch (connectErr) {
+            // Bisa gagal jika sudah terkoneksi; lanjut coba cetak
+            console.warn('Printer connect retry:', connectErr);
           }
 
           const is80 = shop.paperSize === '80mm';
@@ -428,14 +450,16 @@ export const receiptService = {
           rawPrint += "<C>Cetak via MyGarage Lite</C>\n\n\n";
 
           await BLEPrinter.printBill(rawPrint);
-          return;
+          return 'bluetooth';
         } catch (e) {
-           console.warn('Bluetooth print failed, falling back to PDF', e);
+          if (e instanceof PrinterPrintError) throw e;
+          console.warn('Bluetooth print failed:', e);
+          throw new PrinterPrintError();
         }
       }
     }
 
-    // Fallback: Cetak ke PDF
+    // Tanpa printer thermal / kertas A4: cetak PDF
     const html = receiptType === 'diterima'
       ? await this.buildPendingHtml(tx, shopOverride)
       : await this.buildHtml(tx, shopOverride);
@@ -446,6 +470,7 @@ export const receiptService = {
         dialogTitle: receiptType === 'diterima' ? 'Order Dibuat' : 'Struk Servis',
       });
     }
+    return 'pdf';
   },
 
   /**

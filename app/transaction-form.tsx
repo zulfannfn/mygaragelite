@@ -2,18 +2,17 @@ import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  FlatList,
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  Pressable,
-  ScrollView,
-  Text,
-  View,
-  Alert
+    Alert,
+    FlatList,
+    KeyboardAvoidingView,
+    Modal,
+    Platform,
+    Pressable,
+    ScrollView,
+    Text,
+    View
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { InterstitialAd } from '../src/components/ui/AdBanner';
 import { Button } from '../src/components/ui/Button';
 import { Card } from '../src/components/ui/Card';
 import { Input } from '../src/components/ui/Input';
@@ -31,15 +30,15 @@ import { sparepartService } from '../src/services/sparepartService';
 import { useAppStore } from '../src/store/useAppStore';
 import { useTransactionStore } from '../src/store/useTransactionStore';
 import {
-  Customer,
-  Employee,
-  PaymentMethod,
-  Sparepart,
-  Transaction,
-  TransactionStatus,
-  TransactionType,
+    Customer,
+    Employee,
+    PaymentMethod,
+    Sparepart,
+    Transaction,
+    TransactionType,
 } from '../src/types';
 import { formatCurrency, parseCurrency } from '../src/utils/currency';
+import { handleReceiptPrintError } from '../src/utils/printerAlert';
 
 interface ServiceLine {
   service_name: string;
@@ -88,7 +87,6 @@ export default function TransactionForm() {
   const [parts, setParts] = useState<SparepartLine[]>([]);
   const [complaint, setComplaint] = useState('');
   const [transactionType, setTransactionType] = useState<TransactionType>(params.type === 'retail' ? 'retail' : 'service');
-  const [status, setStatus] = useState<TransactionStatus>('pending');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('Tunai');
   const [paidAmount, setPaidAmount] = useState('');
   const [loading, setLoading] = useState(false);
@@ -99,6 +97,12 @@ export default function TransactionForm() {
 
   const isRetail = transactionType === 'retail';
 
+  const canSaveService =
+    !!selectedCustomer &&
+    !!selectedMechanicId &&
+    !!selectedCashierId &&
+    complaint.trim().length > 0;
+
   // Picker modals
   const [customerPickerOpen, setCustomerPickerOpen] = useState(false);
   const [customerSearch, setCustomerSearch] = useState('');
@@ -108,6 +112,17 @@ export default function TransactionForm() {
   const [customServiceName, setCustomServiceName] = useState('');
   const [customServicePrice, setCustomServicePrice] = useState('');
   const [dbServices, setDbServices] = useState<{ name: string; price: number }[]>([]);
+
+  // Custom sparepart form states
+  const [showCustomSparepartForm, setShowCustomSparepartForm] = useState(false);
+  const [customSpName, setCustomSpName] = useState('');
+  const [customSpBuyPrice, setCustomSpBuyPrice] = useState('');
+  const [customSpSellPrice, setCustomSpSellPrice] = useState('');
+  const [customSpStock, setCustomSpStock] = useState('1');
+  const [customSpMinStock, setCustomSpMinStock] = useState('0');
+  const [customSpCategory, setCustomSpCategory] = useState('');
+  const [showCategoryPicker, setShowCategoryPicker] = useState(false);
+  const [newCategory, setNewCategory] = useState('');
 
   useFocusEffect(
     useCallback(() => {
@@ -152,6 +167,45 @@ export default function TransactionForm() {
   const filteredSpareparts = spareparts.filter((s) =>
     s.name.toLowerCase().includes(sparepartSearch.toLowerCase())
   );
+
+  const categories = React.useMemo(() => {
+    const uniqueCategories = [...new Set(spareparts.map((s) => s.category))];
+    return uniqueCategories.sort();
+  }, [spareparts]);
+
+  const submitCustomSparepart = async () => {
+    if (!customSpName.trim() || !customSpBuyPrice.trim() || !customSpSellPrice.trim() || !customSpStock.trim()) {
+      Alert.alert('Peringatan', 'Mohon lengkapi semua data');
+      return;
+    }
+    try {
+      const stockVal = Math.max(0, parseInt(customSpStock) || 0);
+      const minStockVal = Math.max(0, parseInt(customSpMinStock) || 0);
+      const newSp = await sparepartService.create({
+        name: customSpName.trim(),
+        category: customSpCategory.trim() || 'Umum',
+        buy_price: Number(customSpBuyPrice.replace(/[^0-9]/g, '')) || 0,
+        sell_price: Number(customSpSellPrice.replace(/[^0-9]/g, '')) || 0,
+        stock: stockVal,
+        min_stock: minStockVal,
+      });
+      // Add to transaction
+      addSparepart(newSp);
+      // Refresh spareparts list
+      sparepartService.getAll().then(setSpareparts);
+      // Reset form
+      setShowCustomSparepartForm(false);
+      setCustomSpName('');
+      setCustomSpBuyPrice('');
+      setCustomSpSellPrice('');
+      setCustomSpStock('1');
+      setCustomSpMinStock('0');
+      setCustomSpCategory('');
+      setSparepartPickerOpen(false);
+    } catch (e) {
+      console.error('Error create custom sparepart', e);
+    }
+  };
 
   const addPresetService = (s: { name: string; price: number }) => {
     setServices((prev) => [...prev, { service_name: s.name, price: s.price }]);
@@ -237,6 +291,10 @@ export default function TransactionForm() {
       showToast('Isi keluhan pelanggan dulu', 'error');
       return;
     }
+    if (!isRetail && !selectedCashierId) {
+      showToast('Pilih kasir dulu', 'error');
+      return;
+    }
     if (isRetail && parts.length === 0) {
       showToast('Tambahkan minimal 1 sparepart', 'error');
       return;
@@ -257,7 +315,7 @@ export default function TransactionForm() {
 
   const doSave = async () => {
     setConfirmModalOpen(false);
-    const finalStatus: TransactionStatus = isRetail ? 'paid' : status;
+    const finalStatus = isRetail ? 'paid' : 'pending';
     const finalServices = isRetail ? [] : services;
     const finalParts = parts;
     const total = totalService + totalSparepart;
@@ -294,8 +352,6 @@ export default function TransactionForm() {
         })),
       });
       showToast('Transaksi disimpan', 'success');
-      InterstitialAd.show();
-      // Redirect to transaction detail page
       router.replace(`/transaction-detail?id=${created.id}`);
     } catch (e: any) {
       showToast('Gagal menyimpan: ' + (e?.message ?? ''), 'error');
@@ -308,9 +364,12 @@ export default function TransactionForm() {
     if (!savedTx) return;
     setActionBusy('print');
     try {
-      await receiptService.printPdf(savedTx);
-    } catch (e: any) {
-      showToast('Gagal cetak: ' + (e?.message ?? ''), 'error');
+      const method = await receiptService.printPdf(savedTx);
+      if (method === 'bluetooth') {
+        showToast('Struk dikirim ke printer', 'success');
+      }
+    } catch (e: unknown) {
+      handleReceiptPrintError(e, router, showToast);
     } finally {
       setActionBusy(null);
     }
@@ -336,10 +395,11 @@ export default function TransactionForm() {
     <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
       <ScreenHeader title={isRetail ? 'Transaksi Kasir' : 'Transaksi Servis'} showBack />
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior="padding"
         style={{ flex: 1 }}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top + 56 : 0}
       >
-        <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 120 + (Platform.OS === 'android' ? 48 : 34), gap: 20 }}>
+        <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 180 + (Platform.OS === 'android' ? 48 : 34), gap: 20 }}>
           {/* Transaction type toggle */}
           <View style={{ flexDirection: 'row', gap: 10, marginBottom: 4 }}>
             <Pressable
@@ -732,32 +792,6 @@ export default function TransactionForm() {
             </View>
           )}
 
-          {/* Status (service only; retail auto-paid) - locked to pending for service */}
-          {!isRetail && (
-            <View>
-              <Text style={sectionTitle}>Status Pembayaran</Text>
-              <View style={{
-                flexDirection: 'row',
-                alignItems: 'center',
-                padding: 14,
-                borderRadius: theme.radius.lg,
-                backgroundColor: theme.colors.cardLight,
-                borderWidth: 1,
-                borderColor: theme.colors.border,
-              }}>
-                <Ionicons name="time" size={20} color={theme.colors.warning} />
-                <Text style={{
-                  color: theme.colors.warning,
-                  fontWeight: '700',
-                  fontSize: 15,
-                  marginLeft: 12,
-                }}>
-                  Pending
-                </Text>
-              </View>
-            </View>
-          )}
-
           {/* Retail: always show payment method; Bayar only for Tunai */}
           {isRetail && (
             <>
@@ -777,12 +811,21 @@ export default function TransactionForm() {
                 <View style={{ marginBottom: 6 }}>
                   <Text style={sectionTitle}>Bayar (Rp)</Text>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                    <View style={{ flex: 1 }}>
+                    <View
+                      style={{
+                        flex: 1,
+                        borderWidth: 2,
+                        borderColor: theme.colors.warning,
+                        borderRadius: theme.radius.md,
+                        padding: 2,
+                      }}
+                    >
                       <Input
                         value={paidAmount}
                         onChangeText={setPaidAmount}
                         placeholder="Masukkan jumlah uang..."
                         keyboardType="numeric"
+                        containerStyle={{ marginBottom: 0 }}
                       />
                     </View>
                     {paidAmount ? (
@@ -830,9 +873,7 @@ export default function TransactionForm() {
               flexDirection: 'row',
               justifyContent: 'space-between',
               alignItems: 'center',
-              paddingTop: 8,
-              borderTopWidth: 1,
-              borderTopColor: theme.colors.divider,
+              paddingTop: 16,
             }}
           >
             <Text style={{ color: theme.colors.text, fontSize: 16, fontWeight: '700' }}>
@@ -843,12 +884,18 @@ export default function TransactionForm() {
             </Text>
           </View>
           <Button
-            title={isRetail ? 'Simpan & Cetak' : 'Simpan Transaksi'}
+            title={isRetail ? 'Simpan & Cetak' : 'Simpan dan lanjutkan'}
             onPress={save}
             loading={loading}
             size="lg"
             fullWidth
-            style={{ marginTop: 4 }}
+            style={{ marginTop: 16 }}
+            disabled={
+              (!isRetail && !canSaveService) ||
+              (isRetail && parts.length === 0) ||
+              (isRetail && !selectedCashierId) ||
+              (isRetail && paymentMethod === 'Tunai' && (!paidAmount || parseCurrency(paidAmount) < grandTotal))
+            }
             icon={
               <Ionicons
                 name={isRetail ? 'print' : 'save'}
@@ -1019,86 +1066,348 @@ export default function TransactionForm() {
       </Modal>
 
       {/* Sparepart Picker */}
-      <Modal
-        visible={sparepartPickerOpen}
-        animationType="slide"
-        onRequestClose={() => setSparepartPickerOpen(false)}
-      >
-        <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
-          <ScreenHeader title="Pilih Sparepart" showBack />
-          <SearchBar value={sparepartSearch} onChangeText={setSparepartSearch} />
-          <FlatList
-            data={filteredSpareparts}
-            keyExtractor={(s) => s.id}
-            contentContainerStyle={{ padding: 16, paddingBottom: 16 + insets.bottom }}
-            ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
-            renderItem={({ item }) => {
-              const isOut = item.stock <= 0;
-              return (
+      <Modal visible={sparepartPickerOpen} transparent animationType="slide" onRequestClose={() => setSparepartPickerOpen(false)}>
+        <Pressable
+          onPress={() => setSparepartPickerOpen(false)}
+          style={{
+            flex: 1,
+            backgroundColor: 'rgba(0,0,0,0.6)',
+            justifyContent: 'flex-end',
+          }}
+        >
+          <Pressable
+            onPress={(e) => e.stopPropagation()}
+            style={{
+              backgroundColor: theme.colors.surface,
+              borderTopLeftRadius: theme.radius.xl,
+              borderTopRightRadius: theme.radius.xl,
+              paddingTop: 8,
+              paddingBottom: Math.max(28, insets.bottom + 16),
+              height: '90%',
+            }}
+          >
+            <View
+              style={{
+                width: 40,
+                height: 4,
+                borderRadius: 2,
+                backgroundColor: theme.colors.borderLight,
+                alignSelf: 'center',
+                marginBottom: 12,
+              }}
+            />
+
+            <View style={{ paddingHorizontal: 20, marginBottom: 12 }}>
+              <Text style={{ color: theme.colors.text, fontSize: 18, fontWeight: '800' }}>
+                Pilih Sparepart
+              </Text>
+            </View>
+
+            <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center', paddingHorizontal: 16, marginBottom: 12 }}>
+              <View style={{ flex: 1 }}>
+                <SearchBar
+                  value={sparepartSearch}
+                  onChangeText={setSparepartSearch}
+                  placeholder="Cari sparepart..."
+                  containerStyle={{ marginHorizontal: 0, marginBottom: 0 }}
+                />
+              </View>
+              <Pressable
+                onPress={() => setShowCustomSparepartForm(!showCustomSparepartForm)}
+                style={({ pressed }) => ({
+                  width: 48,
+                  height: 48,
+                  borderRadius: theme.radius.md,
+                  backgroundColor: showCustomSparepartForm ? theme.colors.accent : theme.colors.card,
+                  borderWidth: 1,
+                  borderColor: showCustomSparepartForm ? theme.colors.accent : theme.colors.border,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  opacity: pressed ? 0.7 : 1,
+                })}
+              >
+                <Ionicons
+                  name="add"
+                  size={20}
+                  color={showCustomSparepartForm ? '#fff' : theme.colors.textSecondary}
+                />
+              </Pressable>
+            </View>
+
+            {showCustomSparepartForm && (
+              <View
+                style={{
+                  padding: 14,
+                  backgroundColor: theme.colors.card,
+                  borderRadius: theme.radius.lg,
+                  borderWidth: 1,
+                  borderColor: theme.colors.border,
+                  marginHorizontal: 16,
+                  marginBottom: 12,
+                }}
+              >
+                <Input
+                  value={customSpName}
+                  onChangeText={setCustomSpName}
+                  placeholder="Nama Sparepart"
+                />
                 <Pressable
-                  onPress={() => !isOut && addSparepart(item)}
-                  disabled={isOut}
-                  style={({ pressed }) => ({
-                    flexDirection: 'row',
-                    alignItems: 'flex-start',
-                    gap: 12,
-                    padding: 14,
-                    borderRadius: theme.radius.lg,
-                    backgroundColor: pressed ? theme.colors.cardLight : theme.colors.card,
+                  onPress={() => setShowCategoryPicker(true)}
+                  style={{
+                    backgroundColor: theme.colors.background,
+                    borderRadius: theme.radius.md,
                     borderWidth: 1,
                     borderColor: theme.colors.border,
-                    opacity: isOut ? 0.5 : 1,
-                  })}
+                    paddingHorizontal: 16,
+                    paddingVertical: 12,
+                    marginBottom: 12,
+                  }}
                 >
-                  <View
-                    style={{
-                      width: 44,
-                      height: 44,
-                      borderRadius: 12,
-                      backgroundColor: isOut ? theme.colors.borderLight : theme.colors.warning + '15',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      flexShrink: 0,
-                    }}
-                  >
-                    <Ionicons name="cube" size={20} color={isOut ? theme.colors.textMuted : theme.colors.warning} />
+                  <Text style={{ color: customSpCategory ? theme.colors.text : theme.colors.textSecondary }}>
+                    {customSpCategory || 'Pilih Kategori Sparepart'}
+                  </Text>
+                </Pressable>
+                <View style={{ flexDirection: 'row', gap: 12 }}>
+                  <View style={{ flex: 1 }}>
+                    <Input
+                      value={customSpBuyPrice}
+                      onChangeText={setCustomSpBuyPrice}
+                      placeholder="Harga Beli (Rp)"
+                      keyboardType="numeric"
+                    />
                   </View>
-                  <View style={{ flex: 1, gap: 4 }}>
+                  <View style={{ flex: 1 }}>
+                    <Input
+                      value={customSpSellPrice}
+                      onChangeText={setCustomSpSellPrice}
+                      placeholder="Harga Jual (Rp)"
+                      keyboardType="numeric"
+                    />
+                  </View>
+                </View>
+                <View style={{ flexDirection: 'row', gap: 12 }}>
+                  <View style={{ flex: 1 }}>
+                    <Input
+                      value={customSpStock}
+                      onChangeText={setCustomSpStock}
+                      placeholder="Stok"
+                      keyboardType="numeric"
+                    />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Input
+                      value={customSpMinStock}
+                      onChangeText={setCustomSpMinStock}
+                      placeholder="Minimum Stok"
+                      keyboardType="numeric"
+                    />
+                  </View>
+                </View>
+                <Button
+                  title="Tambah Sparepart Baru"
+                  fullWidth
+                  onPress={submitCustomSparepart}
+                  disabled={!customSpName.trim() || !customSpBuyPrice.trim() || !customSpSellPrice.trim() || !customSpStock.trim()}
+                  icon={<Ionicons name="add-circle" size={18} color="#fff" />}
+                />
+              </View>
+            )}
+
+            <FlatList
+              data={filteredSpareparts}
+              keyExtractor={(s) => s.id}
+              contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 12 }}
+              renderItem={({ item }) => {
+                const isOut = item.stock <= 0;
+                return (
+                  <Pressable
+                    onPress={() => !isOut && addSparepart(item)}
+                    disabled={isOut}
+                    style={({ pressed }) => ({
+                      flexDirection: 'row',
+                      alignItems: 'flex-start',
+                      padding: 14,
+                      borderRadius: theme.radius.lg,
+                      backgroundColor: pressed ? theme.colors.cardLight : theme.colors.card,
+                      borderWidth: 1,
+                      borderColor: theme.colors.border,
+                      marginBottom: 8,
+                      opacity: isOut ? 0.5 : 1,
+                    })}
+                  >
+                    <View
+                      style={{
+                        width: 44,
+                        height: 44,
+                        borderRadius: 12,
+                        backgroundColor: isOut ? theme.colors.borderLight : theme.colors.warning + '15',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        marginRight: 12,
+                      }}
+                    >
+                      <Ionicons name="cube" size={20} color={isOut ? theme.colors.textMuted : theme.colors.warning} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text
+                        style={{
+                          color: theme.colors.text,
+                          fontSize: 15,
+                          fontWeight: '600',
+                        }}
+                        numberOfLines={1}
+                      >
+                        {item.name}
+                      </Text>
+                      <Text
+                        style={{
+                          color: isOut ? theme.colors.danger : theme.colors.textSecondary,
+                          fontSize: 12,
+                          marginTop: 4,
+                        }}
+                      >
+                        {isOut ? 'STOK HABIS' : `Stok: ${item.stock}`} • {item.category}
+                      </Text>
+                    </View>
                     <Text
                       style={{
-                        color: theme.colors.text,
+                        color: theme.colors.accent,
+                        fontSize: 15,
+                        fontWeight: '700',
+                        marginLeft: 8,
+                      }}
+                    >
+                      {formatCurrency(item.sell_price)}
+                    </Text>
+                  </Pressable>
+                );
+              }}
+            />
+          </Pressable>
+        </Pressable>
+
+        {/* Category Picker Modal */}
+        <Modal visible={showCategoryPicker} transparent animationType="slide">
+          <Pressable
+            onPress={() => setShowCategoryPicker(false)}
+            style={{
+              flex: 1,
+              backgroundColor: 'rgba(0,0,0,0.6)',
+              justifyContent: 'flex-end',
+            }}
+          >
+            <Pressable
+              onPress={(e) => e.stopPropagation()}
+              style={{
+                backgroundColor: theme.colors.surface,
+                borderTopLeftRadius: theme.radius.xl,
+                borderTopRightRadius: theme.radius.xl,
+                paddingTop: 8,
+                paddingBottom: Math.max(28, insets.bottom + 16),
+                height: '90%',
+              }}
+            >
+              <View
+                style={{
+                  width: 40,
+                  height: 4,
+                  borderRadius: 2,
+                  backgroundColor: theme.colors.borderLight,
+                  alignSelf: 'center',
+                  marginBottom: 12,
+                }}
+              />
+
+              <View style={{ paddingHorizontal: 20, marginBottom: 12 }}>
+                <Text style={{ color: theme.colors.text, fontSize: 18, fontWeight: '800' }}>
+                  Pilih Kategori
+                </Text>
+              </View>
+
+              {/* Add new category section at the top */}
+              <View style={{ paddingHorizontal: 16, marginBottom: 12 }}>
+                <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+                  <View style={{ flex: 1 }}>
+                    <Input
+                      value={newCategory}
+                      onChangeText={setNewCategory}
+                      placeholder="Kategori baru..."
+                      containerStyle={{ marginBottom: 0 }}
+                    />
+                  </View>
+                  <Pressable
+                    onPress={() => {
+                      if (newCategory.trim()) {
+                        setCustomSpCategory(newCategory.trim());
+                        setNewCategory('');
+                        setShowCategoryPicker(false);
+                      }
+                    }}
+                    disabled={!newCategory.trim()}
+                    style={({ pressed }) => ({
+                      width: 48,
+                      height: 48,
+                      borderRadius: theme.radius.md,
+                      backgroundColor: newCategory.trim() ? theme.colors.accent : theme.colors.card,
+                      borderWidth: 1,
+                      borderColor: newCategory.trim() ? theme.colors.accent : theme.colors.border,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      opacity: pressed ? 0.7 : 1,
+                    })}
+                  >
+                    <Ionicons
+                      name="add"
+                      size={20}
+                      color={newCategory.trim() ? '#fff' : theme.colors.textSecondary}
+                    />
+                  </Pressable>
+                </View>
+              </View>
+
+              <FlatList
+                data={categories}
+                keyExtractor={(item) => item}
+                contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 12 }}
+                renderItem={({ item }) => (
+                  <Pressable
+                    onPress={() => {
+                      setCustomSpCategory(item);
+                      setShowCategoryPicker(false);
+                    }}
+                    style={{
+                      padding: 14,
+                      backgroundColor: customSpCategory === item ? theme.colors.accent + '15' : theme.colors.card,
+                      borderRadius: theme.radius.lg,
+                      borderWidth: 1,
+                      borderColor: customSpCategory === item ? theme.colors.accent : theme.colors.border,
+                      marginBottom: 8,
+                    }}
+                  >
+                    <Text
+                      style={{
+                        color: customSpCategory === item ? theme.colors.accent : theme.colors.text,
                         fontSize: 15,
                         fontWeight: '600',
                       }}
-                      numberOfLines={1}
                     >
-                      {item.name}
+                      {item}
                     </Text>
-                    <Text
-                      style={{
-                        color: isOut ? theme.colors.danger : theme.colors.textSecondary,
-                        fontSize: 12,
-                      }}
-                    >
-                      {isOut ? 'STOK HABIS' : `Stok: ${item.stock}`} • {item.category}
-                    </Text>
-                  </View>
-                  <Text
-                    style={{
-                      color: theme.colors.accent,
-                      fontSize: 15,
-                      fontWeight: '700',
-                      flexShrink: 0,
-                      marginLeft: 8,
-                    }}
-                  >
-                    {formatCurrency(item.sell_price)}
-                  </Text>
-                </Pressable>
-              );
-            }}
-          />
-        </View>
+                  </Pressable>
+                )}
+              />
+
+              <View style={{ paddingHorizontal: 16, paddingBottom: 16 }}>
+                <Button
+                  title="Tutup"
+                  variant="ghost"
+                  fullWidth
+                  onPress={() => setShowCategoryPicker(false)}
+                />
+              </View>
+            </Pressable>
+          </Pressable>
+        </Modal>
       </Modal>
 
       {/* Kasir confirm modal */}

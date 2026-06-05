@@ -1,5 +1,5 @@
 import { getDatabase } from '../database/db';
-import { DashboardStats, PaymentMethodTotal, ReportData, TopMechanic, TopService, TopSparepart } from '../types';
+import { CategoryStats, DashboardStats, PaymentMethodTotal, ReportData, TopMechanic, TopService, TopSparepart } from '../types';
 import { endOfDay, endOfMonth, endOfYear, startOfDay, startOfMonth, startOfYear } from '../utils/date';
 
 export const reportService = {

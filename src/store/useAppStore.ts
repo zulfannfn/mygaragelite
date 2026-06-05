@@ -72,7 +72,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
 
-  receiptPaperSize: 'A4',
+  receiptPaperSize: '80mm',
   receiptFooter: '',
   setReceiptInfo: async (info) => {
     if (info.paperSize !== undefined) {
@@ -123,7 +123,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       workshopName: all.workshop_name ?? 'MyGarage Bengkel',
       workshopAddress: all.workshop_address ?? '',
       workshopPhone: all.workshop_phone ?? '',
-      receiptPaperSize: (all.receipt_paper_size as 'A4' | '58mm' | '80mm') ?? 'A4',
+      receiptPaperSize: (all.receipt_paper_size as 'A4' | '58mm' | '80mm') ?? '80mm',
       receiptFooter: all.receipt_footer ?? '',
       connectedPrinter: all.printer_mac ? { name: all.printer_name ?? 'Printer', mac: all.printer_mac } : null,
       onboardingDone: all.onboarding_done === 'true',
