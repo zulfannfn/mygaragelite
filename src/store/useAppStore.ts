@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { settingsService } from '../services/settingsService';
+import type { Language } from '../i18n';
 
 interface AppState {
   // App init
@@ -19,6 +20,10 @@ interface AppState {
   // Theme
   isDarkMode: boolean;
   setDarkMode: (v: boolean) => Promise<void>;
+
+  // Language
+  language: Language;
+  setLanguage: (lang: Language) => Promise<void>;
 
   // Toast
   toast: { id: number; message: string; type: 'success' | 'error' | 'info' } | null;
@@ -106,6 +111,12 @@ export const useAppStore = create<AppState>((set, get) => ({
     await settingsService.set('dark_mode', v ? 'true' : 'false');
   },
 
+  language: 'id',
+  setLanguage: async (lang) => {
+    set({ language: lang });
+    await settingsService.set('language', lang);
+  },
+
   toast: null,
   showToast: (message, type = 'info') => {
     const id = ++toastId;
@@ -128,6 +139,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       connectedPrinter: all.printer_mac ? { name: all.printer_name ?? 'Printer', mac: all.printer_mac } : null,
       onboardingDone: all.onboarding_done === 'true',
       isDarkMode: all.dark_mode !== 'false',
+      language: (all.language === 'en' ? 'en' : 'id') as Language,
     });
   },
 }));

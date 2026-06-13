@@ -25,6 +25,7 @@ import { WhatsAppTemplateModal } from '../src/components/ui/WhatsAppTemplateModa
 import { useTheme } from '../src/contexts/ThemeContext';
 import { receiptService } from '../src/services/receiptService';
 import { transactionService } from '../src/services/transactionService';
+import { useTranslation } from '../src/i18n';
 import { useAppStore } from '../src/store/useAppStore';
 import { useTransactionStore } from '../src/store/useTransactionStore';
 import { Transaction } from '../src/types';
@@ -38,6 +39,7 @@ export default function TransactionDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const showToast = useAppStore((s) => s.showToast);
   const { theme } = useTheme();
+  const t = useTranslation();
   const { updateStatus, remove, load: reloadList } = useTransactionStore();
   const [tx, setTx] = useState<Transaction | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -104,7 +106,7 @@ export default function TransactionDetail() {
     setTx((p) => (p ? { ...p, status: 'paid', payment_method: selectedPaymentMethod as any, paid_amount: paid, change_amount: change } : p));
     setSelectedPaymentMethod(null);
     setPaidAmount('');
-    showToast('Status diperbarui', 'success');
+    showToast(t.common.success, 'success');
     await InterstitialAd.show();
   };
 
@@ -117,14 +119,14 @@ export default function TransactionDetail() {
     if (!id) return;
     await updateStatus(id, 'cancelled', null);
     setTx((p) => (p ? { ...p, status: 'cancelled' } : p));
-    showToast('Transaksi dibatalkan', 'info');
+    showToast(t.common.cancelled, 'info');
   };
 
   const handleDelete = async () => {
     setConfirmDelete(false);
     if (!id) return;
     await remove(id);
-    showToast('Transaksi dihapus', 'success');
+    showToast(t.transactions.deletedSuccess, 'success');
     RewardAd.show();
     router.back();
   };
@@ -135,7 +137,7 @@ export default function TransactionDetail() {
     try {
       const method = await receiptService.printPdf(tx);
       if (method === 'bluetooth') {
-        showToast('Struk dikirim ke printer', 'success');
+        showToast(t.transactions.receiptSent, 'success');
       }
       await InterstitialAd.show();
     } catch (e: unknown) {
@@ -148,7 +150,7 @@ export default function TransactionDetail() {
   const openWaTemplate = () => {
     if (!tx) return;
     if (!tx.customer_phone) {
-      showToast('Pelanggan belum punya nomor HP', 'error');
+      showToast(t.transactions.noPhoneError, 'error');
       return;
     }
     setWaModalOpen(true);
@@ -160,7 +162,7 @@ export default function TransactionDetail() {
       await transactionService.addServiceItem(tx.id, svc.service_name, svc.price);
       await reloadTx();
       await reloadList();
-      showToast('Jasa ditambahkan', 'success');
+      showToast(t.transactions.addedService, 'success');
     } catch (e: any) {
       showToast('Gagal: ' + (e?.message ?? ''), 'error');
     }
@@ -181,7 +183,7 @@ export default function TransactionDetail() {
       await reloadTx();
       await reloadList();
       setAddSparepartOpen(false);
-      showToast('Sparepart ditambahkan', 'success');
+      showToast(t.transactions.addedSparepart, 'success');
     } catch (e: any) {
       showToast('Gagal: ' + (e?.message ?? ''), 'error');
     }
@@ -199,7 +201,7 @@ export default function TransactionDetail() {
       }
       await reloadTx();
       await reloadList();
-      showToast('Item dihapus', 'success');
+      showToast(t.transactions.itemDeleted, 'success');
     } catch (e: any) {
       showToast('Gagal hapus: ' + (e?.message ?? ''), 'error');
     }
@@ -211,7 +213,7 @@ export default function TransactionDetail() {
       await transactionService.updateMeta(tx.id, { mechanic_notes: tempMechanicNotes });
       await reloadTx();
       setEditMechanicNotes(false);
-      showToast('Catatan disimpan', 'success');
+      showToast(t.transactions.notesSaved, 'success');
     } catch (e: any) {
       showToast('Gagal: ' + (e?.message ?? ''), 'error');
     }
@@ -223,7 +225,7 @@ export default function TransactionDetail() {
       await transactionService.updateMeta(tx.id, { recommendation: tempRecommendation });
       await reloadTx();
       setEditRecommendation(false);
-      showToast('Rekomendasi disimpan', 'success');
+      showToast(t.transactions.recommendationSaved, 'success');
     } catch (e: any) {
       showToast('Gagal: ' + (e?.message ?? ''), 'error');
     }
@@ -235,7 +237,7 @@ export default function TransactionDetail() {
       await transactionService.updateMeta(tx.id, { complaint: tempComplaint });
       await reloadTx();
       setEditComplaint(false);
-      showToast('Keluhan disimpan', 'success');
+      showToast(t.transactions.complaintSaved, 'success');
     } catch (e: any) {
       showToast('Gagal: ' + (e?.message ?? ''), 'error');
     }
@@ -259,9 +261,9 @@ export default function TransactionDetail() {
   if (!tx) {
     return (
       <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
-        <ScreenHeader title="Detail Transaksi" showBack />
+        <ScreenHeader title={t.transactions.detailTitle} showBack />
         <Text style={{ color: theme.colors.textMuted, textAlign: 'center', marginTop: 40 }}>
-          Memuat...
+          {t.common.loading}
         </Text>
       </View>
     );
@@ -269,7 +271,7 @@ export default function TransactionDetail() {
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
-      <ScreenHeader title="Detail Transaksi" showBack />
+      <ScreenHeader title={t.transactions.detailTitle} showBack />
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 + (Platform.OS === 'android' ? 48 : 34) }}>
         {/* Header card */}
         <Card style={{ marginBottom: 12, backgroundColor: theme.colors.primary }}>
@@ -277,11 +279,11 @@ export default function TransactionDetail() {
             <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 12 }}>TOTAL</Text>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
               <Badge
-                label={tx.type === 'retail' ? 'Kasir' : 'Service'}
+                label={tx.type === 'retail' ? t.transactions.cashier : t.dashboard.service}
                 variant={tx.type === 'retail' ? 'info' : 'accent'}
               />
               <Badge
-                label={tx.status === 'paid' ? 'Lunas' : tx.status === 'pending' ? 'Pending' : 'Batal'}
+                label={tx.status === 'paid' ? t.common.paid : tx.status === 'pending' ? t.common.pending : t.common.cancelled}
                 variant={tx.status === 'paid' ? 'success' : tx.status === 'pending' ? 'warning' : 'danger'}
               />
             </View>
@@ -296,7 +298,7 @@ export default function TransactionDetail() {
 
         {/* Customer */}
         <Card style={{ marginBottom: 12 }}>
-          <Text style={sectionLabel}>PELANGGAN</Text>
+          <Text style={sectionLabel}>{t.transactions.sectionCustomer}</Text>
           <Text style={{ color: theme.colors.text, fontSize: 16, fontWeight: '700', marginTop: 4 }}>
             {tx.customer_name ?? '-'}
           </Text>
@@ -308,7 +310,7 @@ export default function TransactionDetail() {
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8 }}>
               <Ionicons name="construct" size={14} color={theme.colors.accent} />
               <Text style={{ color: theme.colors.textSecondary, fontSize: 12 }}>
-                Mekanik: <Text style={{ color: theme.colors.text, fontWeight: '700' }}>{tx.mechanic_name}</Text>
+                {t.transactions.mechanic}: <Text style={{ color: theme.colors.text, fontWeight: '700' }}>{tx.mechanic_name}</Text>
               </Text>
             </View>
           ) : null}
@@ -316,7 +318,7 @@ export default function TransactionDetail() {
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8 }}>
               <Ionicons name="person" size={14} color={theme.colors.success} />
               <Text style={{ color: theme.colors.textSecondary, fontSize: 12 }}>
-                Kasir: <Text style={{ color: theme.colors.text, fontWeight: '700' }}>{tx.cashier_name}</Text>
+                {t.transactions.cashier}: <Text style={{ color: theme.colors.text, fontWeight: '700' }}>{tx.cashier_name}</Text>
               </Text>
             </View>
           ) : null}
@@ -328,7 +330,7 @@ export default function TransactionDetail() {
               editComplaint ? (
                 <Card style={{ marginBottom: 12 }}>
                   <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                    <Text style={sectionLabel}>KELUHAN PELANGGAN</Text>
+                    <Text style={sectionLabel}>{t.transactions.sectionComplaint}</Text>
                     <Pressable onPress={() => setEditComplaint(false)} hitSlop={8}>
                       <Ionicons name="close" size={20} color={theme.colors.textSecondary} />
                     </Pressable>
@@ -336,20 +338,20 @@ export default function TransactionDetail() {
                   <Input
                     value={tempComplaint}
                     onChangeText={setTempComplaint}
-                    placeholder="Keluhan pelanggan..."
+                    placeholder={t.transactions.complaint}
                     multiline
                     numberOfLines={3}
                     style={{ minHeight: 80 }}
                   />
                   <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
                     <Button
-                      title="Simpan"
+                      title={t.common.save}
                       size="sm"
                       onPress={saveComplaint}
                       style={{ flex: 1 }}
                     />
                     <Button
-                      title="Batal"
+                      title={t.common.cancel}
                       variant="ghost"
                       size="sm"
                       onPress={() => setEditComplaint(false)}
@@ -360,7 +362,7 @@ export default function TransactionDetail() {
               ) : (
                 <Card style={{ marginBottom: 12 }}>
                   <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                    <Text style={sectionLabel}>KELUHAN PELANGGAN</Text>
+                    <Text style={sectionLabel}>{t.transactions.sectionComplaint}</Text>
                     {tx.status === 'pending' && (
                       <Pressable onPress={startEditComplaint} hitSlop={8}>
                         <Ionicons name="create" size={16} color={theme.colors.accent} />
@@ -376,18 +378,18 @@ export default function TransactionDetail() {
               tx.status === 'pending' && (
                 <Card style={{ marginBottom: 12 }}>
                   <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                    <Text style={sectionLabel}>KELUHAN PELANGGAN</Text>
+                    <Text style={sectionLabel}>{t.transactions.sectionComplaint}</Text>
                   </View>
                   <Input
                     value={tempComplaint}
                     onChangeText={setTempComplaint}
-                    placeholder="Tambahkan keluhan pelanggan..."
+                    placeholder={t.transactions.complaint}
                     multiline
                     numberOfLines={3}
                     style={{ minHeight: 80 }}
                   />
                   <Button
-                    title="Simpan Keluhan"
+                    title={t.common.save}
                     size="sm"
                     onPress={saveComplaint}
                     style={{ marginTop: 8 }}
@@ -410,7 +412,7 @@ export default function TransactionDetail() {
                 marginBottom: 6,
               }}
             >
-              <Text style={sectionLabel}>JASA SERVIS</Text>
+              <Text style={sectionLabel}>{t.transactions.sectionServices}</Text>
               {tx.status === 'pending' ? (
                 <Pressable
                   onPress={() => setAddServiceOpen(true)}
@@ -434,7 +436,7 @@ export default function TransactionDetail() {
                       fontWeight: '700',
                     }}
                   >
-                    Tambah
+                    {t.common.add}
                   </Text>
                 </Pressable>
               ) : null}
@@ -515,7 +517,7 @@ export default function TransactionDetail() {
                   paddingVertical: 12,
                 }}
               >
-                Belum ada jasa
+                {t.transactions.noServices}
               </Text>
             )}
             {tx.service_items && tx.service_items.length > 0 ? (
@@ -526,7 +528,7 @@ export default function TransactionDetail() {
                   paddingTop: 8,
                 }}
               >
-                <Text style={{ color: theme.colors.textSecondary }}>Subtotal</Text>
+                <Text style={{ color: theme.colors.textSecondary }}>{t.transactions.total}</Text>
                 <Text style={{ color: theme.colors.text, fontWeight: '700' }}>
                   {formatCurrency(tx.total_service)}
                 </Text>
@@ -571,7 +573,7 @@ export default function TransactionDetail() {
                       fontWeight: '700',
                     }}
                   >
-                    Tambah
+                    {t.common.add}
                   </Text>
                 </Pressable>
               ) : null}
@@ -654,7 +656,7 @@ export default function TransactionDetail() {
                   paddingVertical: 12,
                 }}
               >
-                Belum ada sparepart
+                {t.transactions.noSpareparts}
               </Text>
             )}
             {tx.spareparts && tx.spareparts.length > 0 ? (
@@ -665,7 +667,7 @@ export default function TransactionDetail() {
                   paddingTop: 8,
                 }}
               >
-                <Text style={{ color: theme.colors.textSecondary }}>Subtotal</Text>
+                <Text style={{ color: theme.colors.textSecondary }}>{t.transactions.total}</Text>
                 <Text style={{ color: theme.colors.text, fontWeight: '700' }}>
                   {formatCurrency(tx.total_sparepart)}
                 </Text>
@@ -680,7 +682,7 @@ export default function TransactionDetail() {
               editRecommendation ? (
                 <Card style={{ marginBottom: 12 }}>
                   <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                    <Text style={sectionLabel}>REKOMENDASI SERVIS BERIKUTNYA</Text>
+                    <Text style={sectionLabel}>{t.transactions.sectionRecommendation}</Text>
                     <Pressable onPress={() => setEditRecommendation(false)} hitSlop={8}>
                       <Ionicons name="close" size={20} color={theme.colors.textSecondary} />
                     </Pressable>
@@ -688,20 +690,20 @@ export default function TransactionDetail() {
                   <Input
                     value={tempRecommendation}
                     onChangeText={setTempRecommendation}
-                    placeholder="Rekomendasi servis berikutnya..."
+                    placeholder={t.transactions.sectionRecommendation}
                     multiline
                     numberOfLines={3}
                     style={{ minHeight: 80 }}
                   />
                   <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
                     <Button
-                      title="Simpan"
+                      title={t.common.save}
                       size="sm"
                       onPress={saveRecommendation}
                       style={{ flex: 1 }}
                     />
                     <Button
-                      title="Batal"
+                      title={t.common.cancel}
                       variant="ghost"
                       size="sm"
                       onPress={() => setEditRecommendation(false)}
@@ -712,7 +714,7 @@ export default function TransactionDetail() {
               ) : (
                 <Card style={{ marginBottom: 12 }}>
                   <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                    <Text style={sectionLabel}>REKOMENDASI SERVIS BERIKUTNYA</Text>
+                    <Text style={sectionLabel}>{t.transactions.sectionRecommendation}</Text>
                     {tx.status !== 'paid' && (
                       <Pressable onPress={startEditRecommendation} hitSlop={8}>
                         <Ionicons name="create" size={16} color={theme.colors.accent} />
@@ -728,18 +730,18 @@ export default function TransactionDetail() {
               tx.status === 'pending' && (
                 <Card style={{ marginBottom: 12 }}>
                   <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                    <Text style={sectionLabel}>REKOMENDASI SERVIS BERIKUTNYA</Text>
+                    <Text style={sectionLabel}>{t.transactions.sectionRecommendation}</Text>
                   </View>
                   <Input
                     value={tempRecommendation}
                     onChangeText={setTempRecommendation}
-                    placeholder="Tambahkan rekomendasi..."
+                    placeholder={t.transactions.sectionRecommendation}
                     multiline
                     numberOfLines={3}
                     style={{ minHeight: 80 }}
                   />
                   <Button
-                    title="Simpan Rekomendasi"
+                    title={t.common.save}
                     size="sm"
                     onPress={saveRecommendation}
                     style={{ marginTop: 8 }}
@@ -752,7 +754,7 @@ export default function TransactionDetail() {
               editMechanicNotes ? (
                 <Card style={{ marginBottom: 12 }}>
                   <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                    <Text style={sectionLabel}>CATATAN INTERNAL MEKANIK</Text>
+                    <Text style={sectionLabel}>{t.transactions.sectionMechanicNotes}</Text>
                     <Pressable onPress={() => setEditMechanicNotes(false)} hitSlop={8}>
                       <Ionicons name="close" size={20} color={theme.colors.textSecondary} />
                     </Pressable>
@@ -760,20 +762,20 @@ export default function TransactionDetail() {
                   <Input
                     value={tempMechanicNotes}
                     onChangeText={setTempMechanicNotes}
-                    placeholder="Catatan internal mekanik..."
+                    placeholder={t.transactions.sectionMechanicNotes}
                     multiline
                     numberOfLines={3}
                     style={{ minHeight: 80 }}
                   />
                   <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
                     <Button
-                      title="Simpan"
+                      title={t.common.save}
                       size="sm"
                       onPress={saveMechanicNotes}
                       style={{ flex: 1 }}
                     />
                     <Button
-                      title="Batal"
+                      title={t.common.cancel}
                       variant="ghost"
                       size="sm"
                       onPress={() => setEditMechanicNotes(false)}
@@ -784,7 +786,7 @@ export default function TransactionDetail() {
               ) : (
                 <Card style={{ marginBottom: 12 }}>
                   <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                    <Text style={sectionLabel}>CATATAN INTERNAL MEKANIK</Text>
+                    <Text style={sectionLabel}>{t.transactions.sectionMechanicNotes}</Text>
                     {tx.status !== 'paid' && (
                       <Pressable onPress={startEditMechanicNotes} hitSlop={8}>
                         <Ionicons name="create" size={16} color={theme.colors.accent} />
@@ -798,18 +800,18 @@ export default function TransactionDetail() {
               tx.status === 'pending' && (
                 <Card style={{ marginBottom: 12 }}>
                   <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                    <Text style={sectionLabel}>CATATAN INTERNAL MEKANIK</Text>
+                    <Text style={sectionLabel}>{t.transactions.sectionMechanicNotes}</Text>
                   </View>
                   <Input
                     value={tempMechanicNotes}
                     onChangeText={setTempMechanicNotes}
-                    placeholder="Tambahkan catatan..."
+                    placeholder={t.transactions.sectionMechanicNotes}
                     multiline
                     numberOfLines={3}
                     style={{ minHeight: 80 }}
                   />
                   <Button
-                    title="Simpan Catatan"
+                    title={t.common.save}
                     size="sm"
                     onPress={saveMechanicNotes}
                     style={{ marginTop: 8 }}
@@ -823,16 +825,16 @@ export default function TransactionDetail() {
         {/* Rincian pembayaran (tampil saat lunas — servis & kasir) */}
         {tx.status === 'paid' && (
           <Card style={{ marginBottom: 12 }}>
-            <Text style={sectionLabel}>RINCIAN PEMBAYARAN</Text>
+            <Text style={sectionLabel}>{t.transactions.sectionPayment}</Text>
             <View style={{ marginTop: 6, gap: 6 }}>
               <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                <Text style={{ color: theme.colors.text, fontSize: 14 }}>Total</Text>
+                <Text style={{ color: theme.colors.text, fontSize: 14 }}>{t.transactions.total}</Text>
                 <Text style={{ color: theme.colors.text, fontSize: 14, fontWeight: '700' }}>
                   {formatCurrency(tx.total_amount)}
                 </Text>
               </View>
               <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                <Text style={{ color: theme.colors.text, fontSize: 14 }}>Metode</Text>
+                <Text style={{ color: theme.colors.text, fontSize: 14 }}>{t.transactions.method}</Text>
                 <Text style={{ color: theme.colors.text, fontSize: 14, fontWeight: '700' }}>
                   {tx.payment_method ?? '-'}
                 </Text>
@@ -840,13 +842,13 @@ export default function TransactionDetail() {
               {tx.payment_method === 'Tunai' && (
                 <>
                   <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                    <Text style={{ color: theme.colors.text, fontSize: 14 }}>Bayar</Text>
+                    <Text style={{ color: theme.colors.text, fontSize: 14 }}>{t.transactions.payAmount}</Text>
                     <Text style={{ color: theme.colors.text, fontSize: 14, fontWeight: '700' }}>
                       {formatCurrency(tx.paid_amount)}
                     </Text>
                   </View>
                   <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                    <Text style={{ color: theme.colors.text, fontSize: 14 }}>Kembalian</Text>
+                    <Text style={{ color: theme.colors.text, fontSize: 14 }}>{t.transactions.change}</Text>
                     <Text style={{ color: theme.colors.success, fontSize: 14, fontWeight: '700' }}>
                       {formatCurrency(tx.change_amount)}
                     </Text>
@@ -860,7 +862,7 @@ export default function TransactionDetail() {
         {/* Receipt actions */}
         <View style={{ flexDirection: 'row', gap: 10, marginTop: 8, marginBottom: 8 }}>
           <Button
-            title="Kirim WA"
+            title={t.transactions.sendWA}
             variant="success"
             size="lg"
             onPress={openWaTemplate}
@@ -869,7 +871,7 @@ export default function TransactionDetail() {
             style={{ flex: 1 }}
           />
           <Button
-            title="Cetak"
+            title={t.common.print}
             variant="secondary"
             size="lg"
             onPress={() => setReceiptPickerOpen(true)}
@@ -882,7 +884,7 @@ export default function TransactionDetail() {
         <View style={{ gap: 10, marginTop: 8 }}>
           {tx.status === 'pending' && tx.type !== 'retail' && (
             <Button
-              title="Tandai Lunas"
+              title={t.transactions.markPaid}
               onPress={() => {
                 const isComplete =
                   tx.complaint?.trim() &&
@@ -892,7 +894,7 @@ export default function TransactionDetail() {
                   tx.mechanic_notes?.trim();
 
                 if (!isComplete) {
-                  Alert.alert('Perhatian', 'Lengkapi dulu keluhan, jasa servis, sparepart, rekomendasi servis, dan catatan mekanik.');
+                  Alert.alert(t.common.attention, t.transactions.completeFormFirst);
                   return;
                 }
                 setPaymentPickerOpen(true);
@@ -907,7 +909,7 @@ export default function TransactionDetail() {
           )}
           {tx.status !== 'cancelled' && (
             <Button
-              title="Hapus"
+              title={t.common.delete}
               variant="outline-danger"
               onPress={() => setConfirmDelete(true)}
               fullWidth
@@ -915,7 +917,7 @@ export default function TransactionDetail() {
           )}
           {tx.status === 'cancelled' && (
             <Button
-              title="Hapus Transaksi"
+              title={t.transactions.deleteTransaction}
               variant="outline-danger"
               onPress={() => setConfirmDelete(true)}
               fullWidth
@@ -926,9 +928,9 @@ export default function TransactionDetail() {
 
       <ConfirmDialog
         visible={confirmDelete}
-        title="Hapus Transaksi?"
-        message="Stok sparepart akan dikembalikan secara otomatis."
-        confirmText="Hapus"
+        title={t.transactions.deleteTitle}
+        message={t.transactions.deleteMessage}
+        confirmText={t.common.delete}
         destructive
         onConfirm={handleDelete}
         onCancel={() => setConfirmDelete(false)}
@@ -936,18 +938,18 @@ export default function TransactionDetail() {
 
       <ConfirmDialog
         visible={confirmCancel}
-        title="Batalkan Transaksi?"
-        message="Transaksi akan ditandai sebagai dibatalkan."
-        confirmText="Batalkan"
+        title={t.transactions.cancelTitle}
+        message={t.transactions.cancelMessage}
+        confirmText={t.common.cancel}
         onConfirm={handleConfirmCancel}
         onCancel={() => setConfirmCancel(false)}
       />
 
       <ConfirmDialog
         visible={!!confirmRemoveItem}
-        title="Hapus Item?"
-        message={`Hapus \"${confirmRemoveItem?.name}\" dari transaksi ini?${confirmRemoveItem?.kind === 'sparepart' ? ' Stok akan dikembalikan.' : ''}`}
-        confirmText="Hapus"
+        title={t.transactions.deleteItemTitle}
+        message={`${t.common.delete} "${confirmRemoveItem?.name}"?${confirmRemoveItem?.kind === 'sparepart' ? ` ${t.transactions.deleteMessage}` : ''}`}
+        confirmText={t.common.delete}
         destructive
         onConfirm={performRemoveItem}
         onCancel={() => setConfirmRemoveItem(null)}
@@ -1019,7 +1021,7 @@ export default function TransactionDetail() {
                   fontWeight: '800',
                 }}
               >
-                Pilih Jenis Struk
+                {t.transactions.selectReceiptType}
               </Text>
             </View>
             <View style={{ paddingHorizontal: 16, paddingBottom: 4, gap: 8 }}>
@@ -1059,10 +1061,10 @@ export default function TransactionDetail() {
                             fontWeight: selectedReceiptType === 'diterima' ? '700' : '500',
                           }}
                         >
-                          Service Diterima
+                          {t.transactions.receiptServiceReceived}
                         </Text>
                         <Text style={{ color: theme.colors.textMuted, fontSize: 11, marginTop: 2 }}>
-                          Service sudah dibuat dan akan segera diselesaikan
+                          {t.transactions.receiptServiceReceivedDesc}
                         </Text>
                       </View>
                     </View>
@@ -1101,10 +1103,10 @@ export default function TransactionDetail() {
                             fontWeight: selectedReceiptType === 'tagihan' ? '700' : '500',
                           }}
                         >
-                          Tagihan
+                          {t.transactions.receiptInvoice}
                         </Text>
                         <Text style={{ color: theme.colors.textMuted, fontSize: 11, marginTop: 2 }}>
-                          Tagihan service selesai
+                          {t.transactions.receiptInvoiceDesc}
                         </Text>
                       </View>
                     </View>
@@ -1140,10 +1142,10 @@ export default function TransactionDetail() {
                           fontWeight: '700',
                         }}
                       >
-                        Selesai + Lunas
+                        {t.transactions.receiptPaid}
                       </Text>
                       <Text style={{ color: theme.colors.textMuted, fontSize: 11, marginTop: 2 }}>
-                        Transaksi selesai dan sudah dibayar
+                        {t.transactions.receiptPaidDesc}
                       </Text>
                     </View>
                   </View>
@@ -1192,7 +1194,7 @@ export default function TransactionDetail() {
             />
             <View style={{ paddingHorizontal: 20, marginBottom: 12 }}>
               <Text style={{ color: theme.colors.text, fontSize: 18, fontWeight: '800' }}>
-                Pilih Metode Pembayaran
+                {t.transactions.selectPaymentMethod}
               </Text>
               <Text
                 style={{
@@ -1201,7 +1203,7 @@ export default function TransactionDetail() {
                   marginTop: 4,
                 }}
               >
-                Pilih cara pembayaran untuk transaksi ini
+                {t.transactions.selectPaymentMethodDesc}
               </Text>
             </View>
             <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 8 }}>
@@ -1258,7 +1260,7 @@ export default function TransactionDetail() {
             </ScrollView>
             <View style={{ paddingHorizontal: 20, paddingTop: 8 }}>
               <Button
-                title="Batal"
+                title={t.common.cancel}
                 variant="ghost"
                 fullWidth
                 onPress={() => setPaymentPickerOpen(false)}
@@ -1308,7 +1310,7 @@ export default function TransactionDetail() {
                   textAlign: 'center',
                 }}
               >
-                Validasi Pembayaran
+                {t.transactions.sectionPayment}
               </Text>
 
               <ScrollView
@@ -1324,7 +1326,7 @@ export default function TransactionDetail() {
                     marginBottom: 6,
                   }}
                 >
-                  Rincian Transaksi
+                  {t.transactions.paymentDetails}
                 </Text>
                 <View style={{ gap: 0, marginBottom: 12 }}>
                   {tx.service_items?.map((s, i) => (
@@ -1389,13 +1391,13 @@ export default function TransactionDetail() {
                   }}
                 >
                   <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                    <Text style={{ color: theme.colors.textSecondary, fontSize: 13 }}>Total</Text>
+                    <Text style={{ color: theme.colors.textSecondary, fontSize: 13 }}>{t.transactions.total}</Text>
                     <Text style={{ color: theme.colors.text, fontSize: 14, fontWeight: '700' }}>
                       {formatCurrency(tx.total_amount)}
                     </Text>
                   </View>
                   <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                    <Text style={{ color: theme.colors.textSecondary, fontSize: 13 }}>Metode</Text>
+                    <Text style={{ color: theme.colors.textSecondary, fontSize: 13 }}>{t.transactions.method}</Text>
                     <Text style={{ color: theme.colors.text, fontSize: 14, fontWeight: '700' }}>
                       {selectedPaymentMethod}
                     </Text>
@@ -1411,12 +1413,12 @@ export default function TransactionDetail() {
                             marginBottom: 4,
                           }}
                         >
-                          Bayar (Rp)
+                          {t.transactions.payAmount}
                         </Text>
                         <Input
                           value={paidAmount}
                           onChangeText={setPaidAmount}
-                          placeholder="Masukkan jumlah uang..."
+                          placeholder={t.transactions.payPlaceholder}
                           keyboardType="numeric"
                         />
                       </View>
@@ -1432,7 +1434,7 @@ export default function TransactionDetail() {
                           {parseCurrency(paidAmount) < tx.total_amount ? (
                             <>
                               <Text style={{ color: theme.colors.textSecondary, fontSize: 13 }}>
-                                Kurang
+                                {t.transactions.shortfall}
                               </Text>
                               <Text
                                 style={{ color: theme.colors.danger, fontSize: 14, fontWeight: '700' }}
@@ -1443,7 +1445,7 @@ export default function TransactionDetail() {
                           ) : (
                             <>
                               <Text style={{ color: theme.colors.textSecondary, fontSize: 13 }}>
-                                Kembalian
+                                {t.transactions.change}
                               </Text>
                               <Text
                                 style={{ color: theme.colors.success, fontSize: 14, fontWeight: '700' }}
@@ -1461,13 +1463,13 @@ export default function TransactionDetail() {
 
               <View style={{ flexDirection: 'row', gap: 10, marginTop: 16 }}>
                 <Button
-                  title="Batal"
+                  title={t.common.cancel}
                   variant="secondary"
                   fullWidth
                   onPress={() => setConfirmPaidModal(false)}
                 />
                 <Button
-                  title="Lanjut"
+                  title={t.common.continue_}
                   fullWidth
                   onPress={confirmMarkPaid}
                   disabled={

@@ -14,6 +14,7 @@ import { useAppStore } from '../../src/store/useAppStore';
 import { DashboardStats, ReportData, Transaction } from '../../src/types';
 import { formatCompactCurrency, formatCurrency } from '../../src/utils/currency';
 import { formatRelative } from '../../src/utils/date';
+import { useTranslation } from '../../src/i18n';
 
 function MiniBarChart({ data, theme }: { data: ReportData[]; theme: any }) {
   const maxRevenue = Math.max(...data.map((d) => d.revenue), 1);
@@ -75,6 +76,7 @@ export default function Dashboard() {
   const insets = useSafeAreaInsets();
   const workshopName = useAppStore((s) => s.workshopName);
   const { theme } = useTheme();
+  const t = useTranslation();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [pending, setPending] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
@@ -123,7 +125,7 @@ export default function Dashboard() {
       <View style={{ paddingTop: insets.top + 12, paddingHorizontal: 20, paddingBottom: 16 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
           <View style={{ flex: 1 }}>
-            <Text style={{ color: theme.colors.textSecondary, fontSize: 13 }}>Selamat datang</Text>
+            <Text style={{ color: theme.colors.textSecondary, fontSize: 13 }}>{t.dashboard.welcome}</Text>
             <Text style={{ color: theme.colors.text, fontSize: 22, fontWeight: '800', marginTop: 2 }}>
               {workshopName}
             </Text>
@@ -151,7 +153,7 @@ export default function Dashboard() {
           <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
             <View style={{ flex: 1 }}>
               <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 12, fontWeight: '600' }}>
-                PENDAPATAN HARI INI
+                {t.dashboard.todayRevenue}
               </Text>
               {loading || !stats ? (
                 <Text style={{ color: '#fff', fontSize: 32, fontWeight: '800', marginTop: 4 }}>...</Text>
@@ -162,19 +164,19 @@ export default function Dashboard() {
               )}
               <View style={{ flexDirection: 'row', gap: 16, marginTop: 12 }}>
                 <View>
-                  <Text style={{ color: 'rgba(255,255,255,0.6)', fontSize: 11 }}>Tahun ini</Text>
+                  <Text style={{ color: 'rgba(255,255,255,0.6)', fontSize: 11 }}>{t.dashboard.thisYear}</Text>
                   <Text style={{ color: '#fff', fontSize: 14, fontWeight: '700', marginTop: 2 }}>
                     {stats ? formatCompactCurrency(stats.yearRevenue) : '-'}
                   </Text>
                 </View>
                 <View>
-                  <Text style={{ color: 'rgba(255,255,255,0.6)', fontSize: 11 }}>Bulan ini</Text>
+                  <Text style={{ color: 'rgba(255,255,255,0.6)', fontSize: 11 }}>{t.dashboard.thisMonth}</Text>
                   <Text style={{ color: '#fff', fontSize: 14, fontWeight: '700', marginTop: 2 }}>
                     {stats ? formatCompactCurrency(stats.monthRevenue) : '-'}
                   </Text>
                 </View>
                 <View>
-                  <Text style={{ color: 'rgba(255,255,255,0.6)', fontSize: 11 }}>Belum lunas</Text>
+                  <Text style={{ color: 'rgba(255,255,255,0.6)', fontSize: 11 }}>{t.dashboard.unpaid}</Text>
                   <Text style={{ color: '#fff', fontSize: 14, fontWeight: '700', marginTop: 2 }}>
                     {stats?.pendingTransactions ?? 0}
                   </Text>
@@ -190,14 +192,14 @@ export default function Dashboard() {
       <View style={{ paddingHorizontal: 16 }}>
         <View style={{ flexDirection: 'row', gap: 10, marginBottom: 10 }}>
           <StatCard
-            title="Total Transaksi"
+            title={t.dashboard.totalTransactions}
             value={loading ? '-' : String(stats?.totalTransactions ?? 0)}
             icon="receipt"
             color={theme.colors.blue}
             theme={theme}
           />
           <StatCard
-            title="Total Sparepart"
+            title={t.dashboard.totalSpareparts}
             value={loading ? '-' : String(stats?.totalSpareparts ?? 0)}
             icon="cube"
             color={theme.colors.success}
@@ -206,14 +208,14 @@ export default function Dashboard() {
         </View>
         <View style={{ flexDirection: 'row', gap: 10, marginBottom: 10 }}>
           <StatCard
-            title="Total Jasa"
+            title={t.dashboard.totalServices}
             value={loading ? '-' : String(stats?.totalServices ?? 0)}
             icon="construct"
             color={theme.colors.accent}
             theme={theme}
           />
           <StatCard
-            title="Pending"
+            title={t.common.pending}
             value={loading ? '-' : String(stats?.pendingTransactions ?? 0)}
             icon="time"
             color={theme.colors.warning}
@@ -222,14 +224,14 @@ export default function Dashboard() {
         </View>
         <View style={{ flexDirection: 'row', gap: 10 }}>
           <StatCard
-            title="Stok Menipis"
+            title={t.dashboard.lowStock}
             value={loading ? '-' : String(stats?.lowStockCount ?? 0)}
             icon="warning"
             color={theme.colors.warning}
             theme={theme}
           />
           <StatCard
-            title="Stok Habis"
+            title={t.dashboard.outOfStock}
             value={loading ? '-' : String(stats?.outOfStockCount ?? 0)}
             icon="alert-circle"
             color={theme.colors.danger}
@@ -241,7 +243,7 @@ export default function Dashboard() {
       {/* Quick Actions */}
       <View style={{ paddingHorizontal: 20, marginTop: 24, marginBottom: 12 }}>
         <Text style={{ color: theme.colors.text, fontSize: 16, fontWeight: '700' }}>
-          Aksi Cepat
+          {t.dashboard.quickActions}
         </Text>
       </View>
       <View
@@ -255,35 +257,35 @@ export default function Dashboard() {
       >
         <QuickAction
           icon="add-circle"
-          label="Transaksi Baru"
+          label={t.dashboard.newTransaction}
           color={theme.colors.accent}
           theme={theme}
           onPress={() => setTransactionTypeModalOpen(true)}
         />
         <QuickAction
           icon="person-add"
-          label="Pelanggan"
+          label={t.nav.customers}
           color={theme.colors.blue}
           theme={theme}
           onPress={() => router.push('/customer-form')}
         />
         <QuickAction
           icon="construct"
-          label="Jasa"
+          label={t.services.title}
           color={theme.colors.primaryLight}
           theme={theme}
           onPress={() => router.push('/services')}
         />
         <QuickAction
           icon="cube"
-          label="Sparepart"
+          label={t.nav.spareparts}
           color={theme.colors.success}
           theme={theme}
           onPress={() => router.push('/sparepart-form')}
         />
         <QuickAction
           icon="people"
-          label="Karyawan"
+          label={t.employees.title}
           color={theme.colors.primaryLight}
           theme={theme}
           onPress={() => router.push('/employees')}
@@ -293,7 +295,7 @@ export default function Dashboard() {
       {/* Perhatian — Pending Transactions */}
       <View style={{ paddingHorizontal: 20, marginTop: 8, marginBottom: 12 }}>
         <Text style={{ color: theme.colors.text, fontSize: 16, fontWeight: '700' }}>
-          ⚠️ Perhatian
+          ⚠️ {t.dashboard.attention}
         </Text>
       </View>
       <View style={{ paddingHorizontal: 16, gap: 10, marginBottom: 8 }}>
@@ -302,7 +304,7 @@ export default function Dashboard() {
         ) : pending.length === 0 ? (
           <Card>
             <Text style={{ color: theme.colors.textMuted, textAlign: 'center', padding: 12 }}>
-              Tidak ada transaksi pending
+              {t.dashboard.noPendingTransactions}
             </Text>
           </Card>
         ) : (
@@ -347,7 +349,7 @@ export default function Dashboard() {
                       }}
                       numberOfLines={1}
                     >
-                      {tx.customer_name ?? 'Tanpa Pelanggan'}
+                      {tx.customer_name ?? t.dashboard.noCustomer}
                     </Text>
                     <Text
                       style={{ color: theme.colors.accent, fontSize: 14, fontWeight: '800' }}
@@ -400,14 +402,14 @@ export default function Dashboard() {
                 marginBottom: 8,
               }}
             >
-              Pilih Jenis Transaksi
+              {t.dashboard.selectTransactionType}
             </Text>
             <Text style={{ color: theme.colors.textSecondary, fontSize: 14, lineHeight: 20, marginBottom: 20 }}>
-              Apakah ini transaksi servis atau kasir (retail)?
+              {t.dashboard.transactionTypeQuestion}
             </Text>
             <View style={{ flexDirection: 'column', gap: 10 }}>
               <Button
-                title="Servis"
+                title={t.dashboard.service}
                 onPress={() => {
                   setTransactionTypeModalOpen(false);
                   router.push({ pathname: '/transaction-form', params: { type: 'service' } });
@@ -416,7 +418,7 @@ export default function Dashboard() {
                 icon={<Ionicons name="construct" size={18} color="#fff" />}
               />
               <Button
-                title="Kasir (Retail)"
+                title={`${t.dashboard.cashier} (Retail)`}
                 onPress={() => {
                   setTransactionTypeModalOpen(false);
                   router.push({ pathname: '/transaction-form', params: { type: 'retail' } });

@@ -9,12 +9,14 @@ import { SearchBar } from '../src/components/ui/SearchBar';
 import { SkeletonCard } from '../src/components/ui/Skeleton';
 import { useTheme } from '../src/contexts/ThemeContext';
 import { serviceService } from '../src/services/serviceService';
+import { useTranslation } from '../src/i18n';
 import { Service } from '../src/types';
 import { formatCurrency } from '../src/utils/currency';
 
 export default function ServicesScreen() {
   const router = useRouter();
   const { theme } = useTheme();
+  const t = useTranslation();
   const [services, setServices] = useState<Service[]>([]);
   const [loading, setLoading] = useState(true);
   const [hasMore, setHasMore] = useState(true);
@@ -53,8 +55,8 @@ export default function ServicesScreen() {
   return (
     <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
       <ScreenHeader
-        title="Daftar Jasa"
-        subtitle={`${services.length} jasa tersedia`}
+        title={t.services.title}
+        subtitle={`${services.length} ${t.services.available}`}
         showBack
         rightElement={
           <Pressable
@@ -78,7 +80,7 @@ export default function ServicesScreen() {
         <SearchBar
           value={search}
           onChangeText={setSearch}
-          placeholder="Cari jasa..."
+          placeholder={t.services.searchPlaceholder}
           containerStyle={{ marginHorizontal: 0 }}
         />
       </View>
@@ -109,8 +111,8 @@ export default function ServicesScreen() {
           ListEmptyComponent={
             <EmptyState
               icon="construct-outline"
-              title="Belum ada jasa"
-              description="Tambahkan jasa servis yang sering digunakan."
+              title={t.services.empty}
+              description={t.services.emptyDesc}
             />
           }
           renderItem={({ item }) => (

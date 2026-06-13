@@ -27,6 +27,7 @@ import { employeeService } from '../src/services/employeeService';
 import { receiptService } from '../src/services/receiptService';
 import { serviceService } from '../src/services/serviceService';
 import { sparepartService } from '../src/services/sparepartService';
+import { useTranslation } from '../src/i18n';
 import { useAppStore } from '../src/store/useAppStore';
 import { useTransactionStore } from '../src/store/useTransactionStore';
 import {
@@ -57,6 +58,7 @@ export default function TransactionForm() {
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{ type?: 'service' | 'retail' }>();
   const { theme } = useTheme();
+  const t = useTranslation();
   const showToast = useAppStore((s) => s.showToast);
   const { add } = useTransactionStore();
 
@@ -280,29 +282,29 @@ export default function TransactionForm() {
 
   const save = () => {
     if (!isRetail && !selectedCustomer) {
-      showToast('Pilih pelanggan dulu', 'error');
+      showToast(t.transactions.selectCustomerFirst, 'error');
       return;
     }
     if (!isRetail && !selectedMechanicId) {
-      showToast('Pilih mekanik dulu', 'error');
+      showToast(t.transactions.selectMechanicFirst, 'error');
       return;
     }
     if (!isRetail && !complaint.trim()) {
-      showToast('Isi keluhan pelanggan dulu', 'error');
+      showToast(t.transactions.fillComplaintFirst, 'error');
       return;
     }
     if (!isRetail && !selectedCashierId) {
-      showToast('Pilih kasir dulu', 'error');
+      showToast(t.transactions.selectCashierFirst, 'error');
       return;
     }
     if (isRetail && parts.length === 0) {
-      showToast('Tambahkan minimal 1 sparepart', 'error');
+      showToast(t.transactions.addMinSparepart, 'error');
       return;
     }
     if (isRetail && paymentMethod === 'Tunai') {
       const paid = parseCurrency(paidAmount);
       if (paid < grandTotal) {
-        Alert.alert('Tidak Cukup', 'Jumlah bayar kurang dari total yang harus dibayar.');
+        Alert.alert(t.transactions.insufficientPayTitle, t.transactions.insufficientPayMessage);
         return;
       }
     }
@@ -351,7 +353,7 @@ export default function TransactionForm() {
           sell_price: p.sell_price,
         })),
       });
-      showToast('Transaksi disimpan', 'success');
+      showToast(t.transactions.saved, 'success');
       router.replace(`/transaction-detail?id=${created.id}`);
     } catch (e: any) {
       showToast('Gagal menyimpan: ' + (e?.message ?? ''), 'error');
@@ -366,7 +368,7 @@ export default function TransactionForm() {
     try {
       const method = await receiptService.printPdf(savedTx);
       if (method === 'bluetooth') {
-        showToast('Struk dikirim ke printer', 'success');
+        showToast(t.transactions.receiptSent, 'success');
       }
     } catch (e: unknown) {
       handleReceiptPrintError(e, router, showToast);
@@ -393,7 +395,7 @@ export default function TransactionForm() {
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
-      <ScreenHeader title={isRetail ? 'Transaksi Kasir' : 'Transaksi Servis'} showBack />
+      <ScreenHeader title={isRetail ? t.transactions.formRetail : t.transactions.formService} showBack />
       <KeyboardAvoidingView
         behavior="padding"
         style={{ flex: 1 }}
@@ -432,7 +434,7 @@ export default function TransactionForm() {
                   marginTop: 4,
                 }}
               >
-                Servis
+                {t.dashboard.service}
               </Text>
             </Pressable>
             <Pressable
@@ -465,7 +467,7 @@ export default function TransactionForm() {
                   marginTop: 4,
                 }}
               >
-                Kasir
+                {t.transactions.cashier}
               </Text>
             </Pressable>
           </View>
@@ -473,7 +475,7 @@ export default function TransactionForm() {
           {/* Customer */}
           <View>
             <Text style={sectionTitle}>
-              Pelanggan{isRetail ? ' (opsional)' : ''}
+              {t.transactions.customer}{isRetail ? ` (${t.common.optional})` : ''}
             </Text>
             <Card onPress={() => setCustomerPickerOpen(true)}>
             {selectedCustomer ? (
@@ -506,7 +508,7 @@ export default function TransactionForm() {
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
                 <Ionicons name="person-add-outline" size={20} color={theme.colors.accent} />
                 <Text style={{ color: theme.colors.textSecondary }}>
-                  {isRetail ? 'Pelanggan umum (tap untuk pilih)' : 'Pilih pelanggan...'}
+                  {isRetail ? t.transactions.generalCustomer : t.reminders.selectCustomer}
                 </Text>
               </View>
             )}
@@ -517,13 +519,13 @@ export default function TransactionForm() {
           {!isRetail && (
             <View>
               <Picker
-                label="Mekanik"
+                label={t.transactions.mechanic}
                 value={selectedMechanicId ?? ''}
                 options={mechanics.map((m) => m.id)}
                 optionLabels={Object.fromEntries(mechanics.map((m) => [m.id, m.name]))}
                 optionIcons={Object.fromEntries(mechanics.map((m) => [m.id, 'construct']))}
                 onChange={(v) => setSelectedMechanicId(v)}
-                placeholder="Pilih mekanik..."
+                placeholder={t.transactions.selectMechanic}
               />
             </View>
           )}
@@ -532,13 +534,13 @@ export default function TransactionForm() {
           {!isRetail && (
             <View>
               <Picker
-                label="Kasir"
+                label={t.transactions.cashier}
                 value={selectedCashierId ?? ''}
                 options={cashiers.map((c) => c.id)}
                 optionLabels={Object.fromEntries(cashiers.map((c) => [c.id, c.name]))}
                 optionIcons={Object.fromEntries(cashiers.map((c) => [c.id, 'person']))}
                 onChange={(v) => setSelectedCashierId(v)}
-                placeholder="Pilih kasir..."
+                placeholder={t.transactions.selectCashier}
               />
             </View>
           )}
@@ -547,13 +549,13 @@ export default function TransactionForm() {
           {isRetail && (
             <View>
               <Picker
-                label="Kasir"
+                label={t.transactions.cashier}
                 value={selectedCashierId ?? ''}
                 options={cashiers.map((c) => c.id)}
                 optionLabels={Object.fromEntries(cashiers.map((c) => [c.id, c.name]))}
                 optionIcons={Object.fromEntries(cashiers.map((c) => [c.id, 'person']))}
                 onChange={(v) => setSelectedCashierId(v)}
-                placeholder="Pilih kasir..."
+                placeholder={t.transactions.selectCashier}
               />
             </View>
           )}
@@ -561,11 +563,11 @@ export default function TransactionForm() {
           {/* Keluhan Pelanggan */}
           {!isRetail && (
             <View>
-              <Text style={sectionTitle}>Keluhan Pelanggan</Text>
+              <Text style={sectionTitle}>{t.transactions.complaint}</Text>
               <Input
                 value={complaint}
                 onChangeText={setComplaint}
-                placeholder="Mis. Mesin terasa kasar, rem kurang pakem..."
+                placeholder={t.transactions.complaintPlaceholder}
                 multiline
                 numberOfLines={3}
                 style={{ minHeight: 70, textAlignVertical: 'top' }}
@@ -681,7 +683,7 @@ export default function TransactionForm() {
                   marginBottom: 8,
                 }}
               >
-                <Text style={sectionTitle}>Sparepart</Text>
+                <Text style={sectionTitle}>{t.transactions.spareparts}</Text>
                 <Pressable
                   onPress={() => setSparepartPickerOpen(true)}
                   hitSlop={8}
@@ -698,14 +700,14 @@ export default function TransactionForm() {
                 >
                   <Ionicons name="add" size={14} color={theme.colors.accent} />
                   <Text style={{ color: theme.colors.accent, fontWeight: '700', fontSize: 12 }}>
-                    Tambah
+                    {t.transactions.addSparepart}
                   </Text>
                 </Pressable>
               </View>
               <Card padding="sm">
                 {parts.length === 0 ? (
                   <Text style={{ color: theme.colors.textMuted, textAlign: 'center', padding: 8 }}>
-                    Belum ada sparepart
+                    {t.transactions.noSpareparts}
                   </Text>
                 ) : (
                   <View style={{ gap: 0 }}>
@@ -796,7 +798,7 @@ export default function TransactionForm() {
           {isRetail && (
             <>
               <Picker
-                label="Metode Pembayaran"
+                label={t.transactions.paymentMethod}
                 value={paymentMethod}
                 options={PAYMENT_METHODS}
                 onChange={(v) => setPaymentMethod(v as PaymentMethod)}
@@ -809,7 +811,7 @@ export default function TransactionForm() {
               />
               {paymentMethod === 'Tunai' && (
                 <View style={{ marginBottom: 6 }}>
-                  <Text style={sectionTitle}>Bayar (Rp)</Text>
+                  <Text style={sectionTitle}>{t.transactions.payAmount}</Text>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
                     <View
                       style={{
@@ -823,7 +825,7 @@ export default function TransactionForm() {
                       <Input
                         value={paidAmount}
                         onChangeText={setPaidAmount}
-                        placeholder="Masukkan jumlah uang..."
+                        placeholder={t.transactions.payPlaceholder}
                         keyboardType="numeric"
                         containerStyle={{ marginBottom: 0 }}
                       />
@@ -832,14 +834,14 @@ export default function TransactionForm() {
                       <View style={{ minWidth: 110, alignItems: 'flex-end' }}>
                         {parseCurrency(paidAmount) < grandTotal ? (
                           <>
-                            <Text style={{ color: theme.colors.textMuted, fontSize: 10 }}>Kurang</Text>
+                            <Text style={{ color: theme.colors.textMuted, fontSize: 10 }}>{t.transactions.shortfall}</Text>
                             <Text style={{ color: theme.colors.danger, fontSize: 14, fontWeight: '800' }}>
                               {formatCurrency(grandTotal - parseCurrency(paidAmount))}
                             </Text>
                           </>
                         ) : (
                           <>
-                            <Text style={{ color: theme.colors.textMuted, fontSize: 10 }}>Kembalian</Text>
+                            <Text style={{ color: theme.colors.textMuted, fontSize: 10 }}>{t.transactions.change}</Text>
                             <Text style={{ color: theme.colors.success, fontSize: 14, fontWeight: '800' }}>
                               {formatCurrency(parseCurrency(paidAmount) - grandTotal)}
                             </Text>
@@ -884,7 +886,7 @@ export default function TransactionForm() {
             </Text>
           </View>
           <Button
-            title={isRetail ? 'Simpan & Cetak' : 'Simpan dan lanjutkan'}
+            title={isRetail ? t.transactions.savePrint : t.transactions.saveContinue}
             onPress={save}
             loading={loading}
             size="lg"
@@ -914,7 +916,7 @@ export default function TransactionForm() {
       >
         <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
           <ScreenHeader
-            title="Pilih Pelanggan"
+            title={t.reminders.pickCustomer}
             showBack
             rightElement={
               <Pressable
@@ -986,12 +988,12 @@ export default function TransactionForm() {
         onRequestClose={() => setServicePickerOpen(false)}
       >
         <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
-          <ScreenHeader title="Pilih Jasa" showBack />
+          <ScreenHeader title={t.services.pickService} showBack />
           <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 16 + insets.bottom }}>
             <Text style={sectionTitle}>Jasa</Text>
             {dbServices.length === 0 ? (
               <Text style={{ color: theme.colors.textMuted, padding: 12 }}>
-                Belum ada jasa. Tambahkan di menu Jasa.
+                {t.services.empty}
               </Text>
             ) : (
               dbServices.map((s, i) => (
@@ -1046,21 +1048,21 @@ export default function TransactionForm() {
               ))
             )}
 
-            <Text style={[sectionTitle, { marginTop: 16 }]}>Atau Custom</Text>
+            <Text style={[sectionTitle, { marginTop: 16 }]}>{t.common.add}</Text>
             <Input
-              label="Nama Jasa"
+              label={t.services.name}
               value={customServiceName}
               onChangeText={setCustomServiceName}
-              placeholder="Mis. Bongkar mesin"
+              placeholder={t.services.namePlaceholder}
             />
             <Input
-              label="Harga"
+              label={t.services.price}
               value={customServicePrice}
               onChangeText={(v) => setCustomServicePrice(v.replace(/[^0-9]/g, ''))}
               keyboardType="numeric"
               placeholder="0"
             />
-            <Button title="Tambahkan" onPress={addCustomService} fullWidth variant="primary" />
+            <Button title={t.common.add} onPress={addCustomService} fullWidth variant="primary" />
           </ScrollView>
         </View>
       </Modal>
@@ -1099,7 +1101,7 @@ export default function TransactionForm() {
 
             <View style={{ paddingHorizontal: 20, marginBottom: 12 }}>
               <Text style={{ color: theme.colors.text, fontSize: 18, fontWeight: '800' }}>
-                Pilih Sparepart
+                {t.spareparts.pickSparepart}
               </Text>
             </View>
 
@@ -1108,7 +1110,7 @@ export default function TransactionForm() {
                 <SearchBar
                   value={sparepartSearch}
                   onChangeText={setSparepartSearch}
-                  placeholder="Cari sparepart..."
+                  placeholder={t.spareparts.searchPlaceholder}
                   containerStyle={{ marginHorizontal: 0, marginBottom: 0 }}
                 />
               </View>
@@ -1149,7 +1151,7 @@ export default function TransactionForm() {
                 <Input
                   value={customSpName}
                   onChangeText={setCustomSpName}
-                  placeholder="Nama Sparepart"
+                  placeholder={t.spareparts.name}
                 />
                 <Pressable
                   onPress={() => setShowCategoryPicker(true)}
@@ -1164,7 +1166,7 @@ export default function TransactionForm() {
                   }}
                 >
                   <Text style={{ color: customSpCategory ? theme.colors.text : theme.colors.textSecondary }}>
-                    {customSpCategory || 'Pilih Kategori Sparepart'}
+                    {customSpCategory || t.spareparts.selectCategory}
                   </Text>
                 </Pressable>
                 <View style={{ flexDirection: 'row', gap: 12 }}>
@@ -1172,7 +1174,7 @@ export default function TransactionForm() {
                     <Input
                       value={customSpBuyPrice}
                       onChangeText={setCustomSpBuyPrice}
-                      placeholder="Harga Beli (Rp)"
+                      placeholder={t.spareparts.buyPrice}
                       keyboardType="numeric"
                     />
                   </View>
@@ -1180,7 +1182,7 @@ export default function TransactionForm() {
                     <Input
                       value={customSpSellPrice}
                       onChangeText={setCustomSpSellPrice}
-                      placeholder="Harga Jual (Rp)"
+                      placeholder={t.spareparts.sellPrice}
                       keyboardType="numeric"
                     />
                   </View>
@@ -1190,7 +1192,7 @@ export default function TransactionForm() {
                     <Input
                       value={customSpStock}
                       onChangeText={setCustomSpStock}
-                      placeholder="Stok"
+                      placeholder={t.spareparts.stock}
                       keyboardType="numeric"
                     />
                   </View>
@@ -1198,13 +1200,13 @@ export default function TransactionForm() {
                     <Input
                       value={customSpMinStock}
                       onChangeText={setCustomSpMinStock}
-                      placeholder="Minimum Stok"
+                      placeholder={t.spareparts.minStock}
                       keyboardType="numeric"
                     />
                   </View>
                 </View>
                 <Button
-                  title="Tambah Sparepart Baru"
+                  title={t.spareparts.addCustomSparepart}
                   fullWidth
                   onPress={submitCustomSparepart}
                   disabled={!customSpName.trim() || !customSpBuyPrice.trim() || !customSpSellPrice.trim() || !customSpStock.trim()}
@@ -1266,7 +1268,7 @@ export default function TransactionForm() {
                           marginTop: 4,
                         }}
                       >
-                        {isOut ? 'STOK HABIS' : `Stok: ${item.stock}`} • {item.category}
+                        {isOut ? t.spareparts.outOfStockLabel : `Stok: ${item.stock}`} • {item.category}
                       </Text>
                     </View>
                     <Text
@@ -1320,7 +1322,7 @@ export default function TransactionForm() {
 
               <View style={{ paddingHorizontal: 20, marginBottom: 12 }}>
                 <Text style={{ color: theme.colors.text, fontSize: 18, fontWeight: '800' }}>
-                  Pilih Kategori
+                  {t.spareparts.pickCategory}
                 </Text>
               </View>
 
@@ -1331,7 +1333,7 @@ export default function TransactionForm() {
                     <Input
                       value={newCategory}
                       onChangeText={setNewCategory}
-                      placeholder="Kategori baru..."
+                      placeholder={t.spareparts.newCategoryPlaceholder}
                       containerStyle={{ marginBottom: 0 }}
                     />
                   </View>
@@ -1399,7 +1401,7 @@ export default function TransactionForm() {
 
               <View style={{ paddingHorizontal: 16, paddingBottom: 16 }}>
                 <Button
-                  title="Tutup"
+                  title={t.common.close}
                   variant="ghost"
                   fullWidth
                   onPress={() => setShowCategoryPicker(false)}
@@ -1436,12 +1438,12 @@ export default function TransactionForm() {
             }}
           >
             <Text style={{ color: theme.colors.text, fontSize: 16, fontWeight: '700', marginBottom: 12, textAlign: 'center' }}>
-              Validasi Transaksi Kasir
+              {t.transactions.validationTitle}
             </Text>
 
             <ScrollView style={{ maxHeight: 320 }} showsVerticalScrollIndicator={false}>
               {/* Items */}
-              <Text style={{ color: theme.colors.textSecondary, fontSize: 12, fontWeight: '600', marginBottom: 6 }}>Rincian Item</Text>
+              <Text style={{ color: theme.colors.textSecondary, fontSize: 12, fontWeight: '600', marginBottom: 6 }}>{t.transactions.itemDetails}</Text>
               <View style={{ gap: 0, marginBottom: 12 }}>
                 {parts.map((p, i) => (
                   <View
@@ -1480,13 +1482,13 @@ export default function TransactionForm() {
                 }}
               >
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                  <Text style={{ color: theme.colors.textSecondary, fontSize: 13 }}>Total</Text>
+                  <Text style={{ color: theme.colors.textSecondary, fontSize: 13 }}>{t.transactions.total}</Text>
                   <Text style={{ color: theme.colors.text, fontSize: 14, fontWeight: '700' }}>
                     {formatCurrency(grandTotal)}
                   </Text>
                 </View>
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                  <Text style={{ color: theme.colors.textSecondary, fontSize: 13 }}>Metode</Text>
+                  <Text style={{ color: theme.colors.textSecondary, fontSize: 13 }}>{t.transactions.method}</Text>
                   <Text style={{ color: theme.colors.text, fontSize: 14, fontWeight: '700' }}>
                     {paymentMethod}
                   </Text>
@@ -1494,13 +1496,13 @@ export default function TransactionForm() {
                 {paymentMethod === 'Tunai' && (
                   <>
                     <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                      <Text style={{ color: theme.colors.textSecondary, fontSize: 13 }}>Bayar</Text>
+                      <Text style={{ color: theme.colors.textSecondary, fontSize: 13 }}>{t.transactions.payAmount}</Text>
                       <Text style={{ color: theme.colors.accent, fontSize: 14, fontWeight: '700' }}>
                         {formatCurrency(parseCurrency(paidAmount))}
                       </Text>
                     </View>
                     <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                      <Text style={{ color: theme.colors.textSecondary, fontSize: 13 }}>Kembalian</Text>
+                      <Text style={{ color: theme.colors.textSecondary, fontSize: 13 }}>{t.transactions.change}</Text>
                       <Text style={{ color: theme.colors.success, fontSize: 14, fontWeight: '700' }}>
                         {formatCurrency(Math.max(0, parseCurrency(paidAmount) - grandTotal))}
                       </Text>
@@ -1512,13 +1514,13 @@ export default function TransactionForm() {
 
             <View style={{ flexDirection: 'row', gap: 10, marginTop: 16 }}>
               <Button
-                title="Batal"
+                title={t.common.cancel}
                 variant="secondary"
                 fullWidth
                 onPress={() => setConfirmModalOpen(false)}
               />
               <Button
-                title="Lanjut"
+                title={t.common.continue_}
                 fullWidth
                 loading={loading}
                 onPress={doSave}
@@ -1567,7 +1569,7 @@ export default function TransactionForm() {
                 <Ionicons name="checkmark-circle" size={40} color={theme.colors.success} />
               </View>
               <Text style={{ color: theme.colors.text, fontSize: 18, fontWeight: '800' }}>
-                Transaksi Disimpan
+                {t.transactions.savedTitle}
               </Text>
               <Text
                 style={{
@@ -1578,7 +1580,7 @@ export default function TransactionForm() {
                 }}
               >
                 Total {savedTx ? formatCurrency(savedTx.total_amount) : ''}
-                {savedTx?.type !== 'retail' ? ' • Kirim struk ke pelanggan?' : ''}
+                {savedTx?.type !== 'retail' ? ` • ${t.transactions.sendReceiptQuestion}` : ''}
               </Text>
             </View>
 
@@ -1586,7 +1588,7 @@ export default function TransactionForm() {
               {savedTx?.type !== 'retail' && (
                 <>
                   <Button
-                    title="Kirim via WhatsApp"
+                    title={t.transactions.sendWA}
                     variant="success"
                     fullWidth
                     size="lg"
@@ -1595,7 +1597,7 @@ export default function TransactionForm() {
                     icon={<Ionicons name="logo-whatsapp" size={18} color="#fff" />}
                   />
                   <Button
-                    title="Cetak / Share PDF"
+                    title={`${t.common.print} / Share PDF`}
                     variant="secondary"
                     fullWidth
                     size="lg"
@@ -1606,7 +1608,7 @@ export default function TransactionForm() {
                 </>
               )}
               <Button
-                title="Selesai"
+                title={t.common.done}
                 variant="ghost"
                 fullWidth
                 onPress={finishAndBack}
@@ -1621,7 +1623,7 @@ export default function TransactionForm() {
                   marginTop: 10,
                 }}
               >
-                * Pelanggan belum punya nomor HP, WA tidak tersedia
+                {t.transactions.noPhone}
               </Text>
             )}
           </View>

@@ -9,6 +9,7 @@ import { Picker } from '../src/components/ui/Picker';
 import { ScreenHeader } from '../src/components/ui/ScreenHeader';
 import { useTheme } from '../src/contexts/ThemeContext';
 import { employeeService } from '../src/services/employeeService';
+import { useTranslation } from '../src/i18n';
 import { useAppStore } from '../src/store/useAppStore';
 import { useEmployeeStore } from '../src/store/useEmployeeStore';
 import { EmployeeRole } from '../src/types';
@@ -23,6 +24,7 @@ export default function EmployeeForm() {
   const isEdit = !!id;
   const showToast = useAppStore((s) => s.showToast);
   const { theme } = useTheme();
+  const t = useTranslation();
   const { add, update, remove } = useEmployeeStore();
 
   const [name, setName] = useState('');
@@ -47,7 +49,7 @@ export default function EmployeeForm() {
 
   const validate = () => {
     const e: Record<string, string> = {};
-    if (isEmpty(name)) e.name = 'Nama wajib diisi';
+    if (isEmpty(name)) e.name = t.employees.nameRequired;
     setErrors(e);
     return Object.keys(e).length === 0;
   };
@@ -64,15 +66,15 @@ export default function EmployeeForm() {
       };
       if (isEdit && id) {
         await update(id, input);
-        showToast('Karyawan diperbarui', 'success');
+        showToast(t.employees.updatedSuccess, 'success');
       } else {
         await add(input);
-        showToast('Karyawan ditambahkan', 'success');
+        showToast(t.employees.addedSuccess, 'success');
         await InterstitialAd.show();
       }
       router.back();
     } catch {
-      showToast('Gagal menyimpan', 'error');
+      showToast(t.employees.saveFailed, 'error');
     } finally {
       setLoading(false);
     }
@@ -83,7 +85,7 @@ export default function EmployeeForm() {
     if (!id) return;
     const res = await remove(id);
     showToast(
-      res.deleted ? 'Karyawan dihapus' : 'Karyawan dinonaktifkan (terkait transaksi)',
+      res.deleted ? t.employees.deletedSuccess : t.employees.deactivatedSuccess,
       'success'
     );
     router.back();
@@ -91,21 +93,21 @@ export default function EmployeeForm() {
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
-      <ScreenHeader title={isEdit ? 'Edit Karyawan' : 'Karyawan Baru'} showBack />
+      <ScreenHeader title={isEdit ? t.employees.editEmployee : t.employees.newEmployee} showBack />
       <KeyboardAvoidingView
         behavior="padding"
         style={{ flex: 1 }}
       >
         <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 40 }}>
           <Input
-            label="Nama Karyawan *"
+            label={`${t.employees.name} *`}
             value={name}
             onChangeText={setName}
-            placeholder="Mis. Pak Joko"
+            placeholder={t.employees.namePlaceholder}
             error={errors.name}
           />
           <Picker
-            label="Jabatan"
+            label={t.employees.role}
             value={role}
             options={ROLES}
             onChange={(v) => setRole(v as EmployeeRole)}
@@ -115,7 +117,7 @@ export default function EmployeeForm() {
             }}
           />
           <Input
-            label="Nomor HP"
+            label={t.employees.phone}
             value={phone}
             onChangeText={setPhone}
             placeholder="081234567890"
@@ -143,10 +145,10 @@ export default function EmployeeForm() {
             />
             <View style={{ flex: 1 }}>
               <Text style={{ color: theme.colors.text, fontWeight: '700' }}>
-                Status: {isActive ? 'Aktif' : 'Nonaktif'}
+                {t.employees.status}: {isActive ? t.employees.active : t.employees.inactive}
               </Text>
               <Text style={{ color: theme.colors.textMuted, fontSize: 12, marginTop: 2 }}>
-                Hanya karyawan aktif yang muncul di pilihan transaksi
+                {t.employees.activeDesc}
               </Text>
             </View>
             <View
@@ -173,7 +175,7 @@ export default function EmployeeForm() {
 
           <View style={{ gap: 10 }}>
             <Button
-              title={isEdit ? 'Simpan Perubahan' : 'Tambah Karyawan'}
+              title={isEdit ? t.common.saveChanges : t.employees.addEmployee}
               onPress={save}
               loading={loading}
               size="lg"
@@ -181,7 +183,7 @@ export default function EmployeeForm() {
             />
             {isEdit && (
               <Button
-                title="Hapus Karyawan"
+                title={t.employees.deleteEmployee}
                 variant="danger"
                 onPress={() => setConfirmDelete(true)}
                 fullWidth
@@ -193,9 +195,9 @@ export default function EmployeeForm() {
 
       <ConfirmDialog
         visible={confirmDelete}
-        title="Hapus Karyawan?"
-        message="Jika karyawan ini sudah pernah dipakai di transaksi, ia akan dinonaktifkan saja agar riwayat tetap utuh."
-        confirmText="Hapus"
+        title={t.employees.deleteTitle}
+        message={t.employees.deleteMessage}
+        confirmText={t.common.delete}
         destructive
         onConfirm={handleDelete}
         onCancel={() => setConfirmDelete(false)}

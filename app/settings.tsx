@@ -13,6 +13,7 @@ import { clearDatabase, resetDatabase } from '../src/database/db';
 import { backupService } from '../src/services/backupService';
 import { useAppStore } from '../src/store/useAppStore';
 import { InterstitialAd } from '../src/components/ui/AdBanner';
+import { useTranslation } from '../src/i18n';
 
 let BLEPrinter: any = null;
 if (Platform.OS !== 'web') {
@@ -39,8 +40,11 @@ export default function SettingsScreen() {
     setReceiptInfo,
     connectedPrinter,
     setConnectedPrinter,
+    language,
+    setLanguage,
   } = useAppStore();
   const { theme } = useTheme();
+  const t = useTranslation();
   const [name, setName] = useState(workshopName);
   const [address, setAddress] = useState(workshopAddress);
   const [phone, setPhone] = useState(workshopPhone);
@@ -68,17 +72,17 @@ export default function SettingsScreen() {
 
   const saveInfo = async () => {
     await setWorkshopInfo({ name: name.trim(), address: address.trim(), phone: phone.trim() });
-    showToast('Pengaturan disimpan', 'success');
+    showToast(t.settings.settingsSaved, 'success');
   };
 
   const doBackup = async () => {
     try {
       setBusy(true);
       await backupService.exportBackup();
-      showToast('Backup berhasil', 'success');
+      showToast(t.settings.backupSuccess, 'success');
       await InterstitialAd.show();
     } catch {
-      showToast('Gagal backup', 'error');
+      showToast(t.settings.backupFailed, 'error');
     } finally {
       setBusy(false);
     }
@@ -91,7 +95,7 @@ export default function SettingsScreen() {
       showToast(r.message, r.ok ? 'success' : 'error');
       if (r.ok) await loadSettings();
     } catch {
-      showToast('Gagal restore', 'error');
+      showToast(t.settings.restoreFailed, 'error');
     } finally {
       setBusy(false);
     }
@@ -102,7 +106,7 @@ export default function SettingsScreen() {
     setBusy(true);
     await resetDatabase();
     await loadSettings();
-    showToast('Database direset & data dummy dimuat', 'success');
+    showToast(t.settings.resetSuccess, 'success');
     setBusy(false);
   };
 
@@ -111,17 +115,17 @@ export default function SettingsScreen() {
     setBusy(true);
     await clearDatabase();
     await loadSettings();
-    showToast('Semua data berhasil dihapus', 'success');
+    showToast(t.settings.deleteSuccess, 'success');
     setBusy(false);
   };
 
   const scanPrinters = async () => {
     if (Platform.OS === 'web') {
-      showToast('Bluetooth tidak didukung di Web', 'error');
+      showToast(t.settings.bluetoothNotSupported, 'error');
       return;
     }
     if (!BLEPrinter) {
-      showToast('Modul printer belum dimuat', 'error');
+      showToast(t.settings.printerModuleNotLoaded, 'error');
       return;
     }
 
@@ -133,7 +137,7 @@ export default function SettingsScreen() {
           PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
         ]);
       } catch (err) {
-        console.warn('Gagal meminta izin:', err);
+        console.warn(t.settings.permissionFailed, err);
       }
     }
 
@@ -143,7 +147,7 @@ export default function SettingsScreen() {
       const results = await BLEPrinter.getDeviceList();
       setBtDevices(results);
     } catch (e) {
-      showToast('Gagal scan, pastikan Bluetooth aktif & diizinkan', 'error');
+      showToast(t.settings.scanFailed, 'error');
     } finally {
       setScanningBt(false);
     }
@@ -155,10 +159,10 @@ export default function SettingsScreen() {
     try {
       await BLEPrinter.connectPrinter(mac);
       await setConnectedPrinter({ name, mac });
-      showToast(`Terhubung ke ${name}`, 'success');
+      showToast(`${t.settings.printerConnected} ${name}`, 'success');
       setBtDevices([]);
     } catch (e) {
-      showToast('Gagal terhubung ke printer', 'error');
+      showToast(t.settings.printerConnectFailed, 'error');
     } finally {
       setConnectingMac(null);
     }
@@ -166,27 +170,27 @@ export default function SettingsScreen() {
 
   const disconnectPrinter = async () => {
     await setConnectedPrinter(null);
-    showToast('Printer diputuskan', 'success');
+    showToast(t.settings.printerDisconnected, 'success');
   };
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
-      <ScreenHeader title="Pengaturan" showBack />
+      <ScreenHeader title={t.settings.title} showBack />
       <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 40 + (Platform.OS === 'android' ? 48 : 34) }}>
-        <Text style={{ ...sectionBase, color: theme.colors.textSecondary }}>BENGKEL</Text>
+        <Text style={{ ...sectionBase, color: theme.colors.textSecondary }}>{t.settings.sectionWorkshop}</Text>
         <Card style={{ marginBottom: 16 }}>
-          <Input label="Nama Bengkel" value={name} onChangeText={setName} />
-          <Input label="Alamat" value={address} onChangeText={setAddress} />
+          <Input label={t.settings.workshopName} value={name} onChangeText={setName} />
+          <Input label={t.settings.workshopAddress} value={address} onChangeText={setAddress} />
           <Input
-            label="No. Telepon"
+            label={t.settings.workshopPhone}
             value={phone}
             onChangeText={setPhone}
             keyboardType="phone-pad"
           />
-          <Button title="Simpan" onPress={saveInfo} fullWidth disabled={!workshopDirty} />
+          <Button title={t.common.save} onPress={saveInfo} fullWidth disabled={!workshopDirty} />
         </Card>
 
-        <Text style={{ ...sectionBase, color: theme.colors.textSecondary }}>MANAJEMEN</Text>
+        <Text style={{ ...sectionBase, color: theme.colors.textSecondary }}>{t.settings.sectionManagement}</Text>
         <Card style={{ marginBottom: 16 }} padding="sm">
           <Pressable
             onPress={() => router.push('/employees')}
@@ -213,20 +217,85 @@ export default function SettingsScreen() {
             </View>
             <View style={{ flex: 1 }}>
               <Text style={{ color: theme.colors.text, fontWeight: '700', fontSize: 15 }}>
-                Kelola Karyawan
+                {t.settings.manageEmployees}
               </Text>
               <Text style={{ color: theme.colors.textMuted, fontSize: 12, marginTop: 2 }}>
-                Tambah/edit mekanik dan kasir
+                {t.settings.manageEmployeesDesc}
               </Text>
             </View>
             <Ionicons name="chevron-forward" size={18} color={theme.colors.textMuted} />
           </Pressable>
+
+          {/* Language toggle */}
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 14,
+              padding: 12,
+              borderTopWidth: 1,
+              borderTopColor: theme.colors.border,
+            }}
+          >
+            <View
+              style={{
+                width: 40,
+                height: 40,
+                borderRadius: 20,
+                backgroundColor: theme.colors.blue + '25',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <Ionicons name="language" size={20} color={theme.colors.blue} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={{ color: theme.colors.text, fontWeight: '700', fontSize: 15 }}>
+                {t.settings.language}
+              </Text>
+              <Text style={{ color: theme.colors.textMuted, fontSize: 12, marginTop: 2 }}>
+                {t.settings.languageDesc}
+              </Text>
+            </View>
+            <View style={{ flexDirection: 'row', gap: 6 }}>
+              <Pressable
+                onPress={() => setLanguage('id')}
+                style={{
+                  paddingHorizontal: 12,
+                  paddingVertical: 6,
+                  borderRadius: theme.radius.md,
+                  backgroundColor: language === 'id' ? theme.colors.blue : theme.colors.cardLight,
+                  borderWidth: 1,
+                  borderColor: language === 'id' ? theme.colors.blue : theme.colors.border,
+                }}
+              >
+                <Text style={{ color: language === 'id' ? '#fff' : theme.colors.textSecondary, fontSize: 13, fontWeight: '600' }}>
+                  🇮🇩 {t.settings.languageIndonesian}
+                </Text>
+              </Pressable>
+              <Pressable
+                onPress={() => setLanguage('en')}
+                style={{
+                  paddingHorizontal: 12,
+                  paddingVertical: 6,
+                  borderRadius: theme.radius.md,
+                  backgroundColor: language === 'en' ? theme.colors.blue : theme.colors.cardLight,
+                  borderWidth: 1,
+                  borderColor: language === 'en' ? theme.colors.blue : theme.colors.border,
+                }}
+              >
+                <Text style={{ color: language === 'en' ? '#fff' : theme.colors.textSecondary, fontSize: 13, fontWeight: '600' }}>
+                  🇬🇧 {t.settings.languageEnglish}
+                </Text>
+              </Pressable>
+            </View>
+          </View>
         </Card>
 
-        <Text style={{ ...sectionBase, color: theme.colors.textSecondary }}>STRUK & CETAK</Text>
+        <Text style={{ ...sectionBase, color: theme.colors.textSecondary }}>{t.settings.sectionReceipt}</Text>
         <Card style={{ marginBottom: 16 }}>
           <Picker
-            label="Ukuran Kertas"
+            label={t.settings.paperSize}
             value={paperSize}
             options={['A4', '58mm', '80mm']}
             onChange={(v) => setPaperSize(v as 'A4' | '58mm' | '80mm')}
@@ -238,10 +307,10 @@ export default function SettingsScreen() {
           />
           <View style={{ marginTop: 8 }}>
             <Button
-              title="Simpan Pengaturan Struk"
+              title={t.settings.saveReceiptSettings}
               onPress={async () => {
                 await setReceiptInfo({ paperSize });
-                showToast('Pengaturan struk disimpan', 'success');
+                showToast(t.settings.settingsSaved, 'success');
               }}
               disabled={!receiptDirty}
               fullWidth
@@ -251,7 +320,7 @@ export default function SettingsScreen() {
 
         {Platform.OS !== 'web' && (
           <>
-            <Text style={{ ...sectionBase, color: theme.colors.textSecondary }}>PRINTER BLUETOOTH (THERMAL)</Text>
+            <Text style={{ ...sectionBase, color: theme.colors.textSecondary }}>{t.settings.sectionPrinter}</Text>
             <Card style={{ marginBottom: 16 }}>
               {connectedPrinter ? (
                 <View style={{ marginBottom: 16, backgroundColor: theme.colors.success + '22', padding: 12, borderRadius: 8, flexDirection: 'row', alignItems: 'center' }}>
@@ -267,10 +336,10 @@ export default function SettingsScreen() {
               ) : (
                 <View style={{ marginBottom: 16 }}>
                   <Text style={{ color: theme.colors.textMuted, fontSize: 13, marginBottom: 8 }}>
-                    Tidak ada printer yang terhubung.
+                    {t.settings.noPrinter}
                   </Text>
                   <Button
-                    title={scanningBt ? 'Mencari Printer...' : 'Scan Printer Bluetooth'}
+                    title={scanningBt ? t.settings.searchingPrinter : t.settings.scanPrinter}
                     onPress={scanPrinters}
                     loading={scanningBt}
                     icon={<Ionicons name="bluetooth" size={18} color="#fff" />}
@@ -282,7 +351,7 @@ export default function SettingsScreen() {
               {btDevices.length > 0 && (
                 <View style={{ marginTop: 8 }}>
                   <Text style={{ fontSize: 12, fontWeight: 'bold', color: theme.colors.text, marginBottom: 8 }}>
-                    Printer Ditemukan:
+                    {t.settings.printersFound}
                   </Text>
                   {btDevices.map((dev, i) => {
                     const mac = dev.inner_mac_address as string;
@@ -307,7 +376,7 @@ export default function SettingsScreen() {
                           <Text style={{ color: theme.colors.textMuted, fontSize: 12 }}>{mac}</Text>
                           {isConnecting ? (
                             <Text style={{ color: theme.colors.accent, fontSize: 12, marginTop: 4 }}>
-                              Menghubungkan...
+                              {t.settings.connecting}
                             </Text>
                           ) : null}
                         </View>
@@ -325,7 +394,7 @@ export default function SettingsScreen() {
           </>
         )}
 
-        <Text style={{ ...sectionBase, color: theme.colors.textSecondary }}>TAMPILAN</Text>
+        <Text style={{ ...sectionBase, color: theme.colors.textSecondary }}>{t.settings.sectionAppearance}</Text>
         <Card style={{ marginBottom: 16 }}>
           <Pressable
             onPress={() => setDarkMode(!isDarkMode)}
@@ -341,10 +410,10 @@ export default function SettingsScreen() {
             <Ionicons name={isDarkMode ? 'moon' : 'sunny'} size={20} color={theme.colors.accent} />
             <View style={{ flex: 1 }}>
               <Text style={{ color: theme.colors.text, fontWeight: '600' }}>
-                {isDarkMode ? 'Dark Mode' : 'Light Mode'}
+                {isDarkMode ? t.settings.darkMode : t.settings.lightMode}
               </Text>
               <Text style={{ color: theme.colors.textMuted, fontSize: 12 }}>
-                {isDarkMode ? 'Tema gelap modern' : 'Tema terang'}
+                {isDarkMode ? t.settings.darkModeDesc : t.settings.lightModeDesc}
               </Text>
             </View>
             <View
@@ -370,10 +439,10 @@ export default function SettingsScreen() {
           </Pressable>
         </Card>
 
-        <Text style={{ ...sectionBase, color: theme.colors.textSecondary }}>DATA</Text>
+        <Text style={{ ...sectionBase, color: theme.colors.textSecondary }}>{t.settings.sectionData}</Text>
         <Card style={{ marginBottom: 12 }}>
           <Button
-            title="Backup Database"
+            title={t.settings.backupDatabase}
             variant="secondary"
             onPress={doBackup}
             loading={busy}
@@ -382,7 +451,7 @@ export default function SettingsScreen() {
           />
           <View style={{ height: 8 }} />
           <Button
-            title="Restore Database"
+            title={t.settings.restoreDatabase}
             variant="outline"
             onPress={doRestore}
             loading={busy}
@@ -393,7 +462,7 @@ export default function SettingsScreen() {
 
         <Card style={{ marginBottom: 16 }}>
           <Button
-            title="Hapus Semua Data"
+            title={t.settings.deleteAllData}
             variant="danger"
             onPress={() => setConfirmClear(true)}
             loading={busy}
@@ -402,7 +471,7 @@ export default function SettingsScreen() {
           />
           <View style={{ height: 8 }} />
           <Button
-            title="Reset & Muat Data Dummy"
+            title={t.settings.resetDummyData}
             variant="outline"
             onPress={() => setConfirmReset(true)}
             loading={busy}
@@ -411,7 +480,7 @@ export default function SettingsScreen() {
           />
         </Card>
 
-        <Text style={{ ...sectionBase, color: theme.colors.textSecondary }}>TENTANG</Text>
+        <Text style={{ ...sectionBase, color: theme.colors.textSecondary }}>{t.settings.sectionAbout}</Text>
         <Card>
           <Text style={{ color: theme.colors.text, fontWeight: '700', fontSize: 16 }}>
             MyGarage Lite
@@ -420,16 +489,15 @@ export default function SettingsScreen() {
             Versi 1.0.0
           </Text>
           <Text style={{ color: theme.colors.textMuted, fontSize: 12, marginTop: 8, lineHeight: 18 }}>
-            Aplikasi manajemen bengkel motor & mobil yang ringan, modern, dan mudah digunakan.
-            Cocok untuk bengkel kecil hingga menengah di Indonesia.
+            {t.settings.appDescription} {t.settings.appTarget}
           </Text>
         </Card>
       </ScrollView>
 
       <ConfirmDialog
         visible={confirmReset}
-        title="Reset Database?"
-        message="Semua data akan dihapus dan diganti dengan data dummy. Tindakan ini tidak dapat dibatalkan."
+        title={t.settings.resetTitle}
+        message={t.settings.resetMessage}
         confirmText="Reset"
         destructive
         onConfirm={doReset}
@@ -437,9 +505,9 @@ export default function SettingsScreen() {
       />
       <ConfirmDialog
         visible={confirmClear}
-        title="Hapus Semua Data?"
-        message="Semua data akan dihapus permanen tanpa data dummy. Tindakan ini tidak dapat dibatalkan."
-        confirmText="Hapus"
+        title={t.settings.deleteTitle}
+        message={t.settings.deleteMessage}
+        confirmText={t.common.delete}
         destructive
         onConfirm={doClear}
         onCancel={() => setConfirmClear(false)}

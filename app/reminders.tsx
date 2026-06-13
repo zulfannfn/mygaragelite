@@ -14,19 +14,15 @@ import { REMINDER_TYPES } from '../src/constants/config';
 import { theme } from '../src/constants/theme';
 import { customerService } from '../src/services/customerService';
 import { reminderService } from '../src/services/reminderService';
+import { useTranslation } from '../src/i18n';
 import { useAppStore } from '../src/store/useAppStore';
 import { Customer, Reminder, ReminderType } from '../src/types';
 import { addDays, daysBetween, formatDate } from '../src/utils/date';
 
-const TYPE_LABEL: Record<ReminderType, string> = {
-  oil_change: 'Ganti Oli',
-  periodic_service: 'Servis Berkala',
-  tune_up: 'Tune Up',
-};
-
 export default function RemindersScreen() {
   const router = useRouter();
   const showToast = useAppStore((s) => s.showToast);
+  const t = useTranslation();
   const [reminders, setReminders] = useState<Reminder[]>([]);
   const [addOpen, setAddOpen] = useState(false);
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -37,6 +33,12 @@ export default function RemindersScreen() {
   const [type, setType] = useState<ReminderType>('oil_change');
   const [days, setDays] = useState('30');
   const [notes, setNotes] = useState('');
+
+  const TYPE_LABEL: Record<ReminderType, string> = {
+    oil_change: t.reminders.oilChange,
+    periodic_service: t.reminders.periodicService,
+    tune_up: t.reminders.tuneUp,
+  };
 
   const load = useCallback(async () => {
     const data = await reminderService.getAll();
@@ -60,7 +62,7 @@ export default function RemindersScreen() {
 
   const submit = async () => {
     if (!selCustomer) {
-      showToast('Pilih pelanggan', 'error');
+      showToast(t.reminders.selectCustomerError, 'error');
       return;
     }
     await reminderService.create({
@@ -69,7 +71,7 @@ export default function RemindersScreen() {
       due_date: addDays(Date.now(), parseInt(days || '30', 10)),
       notes: notes.trim(),
     });
-    showToast('Reminder dibuat', 'success');
+    showToast(t.reminders.createdSuccess, 'success');
     setAddOpen(false);
     setSelCustomer(null);
     setNotes('');
@@ -79,15 +81,15 @@ export default function RemindersScreen() {
 
   const handleDelete = async (id: string) => {
     await reminderService.delete(id);
-    showToast('Reminder dihapus', 'success');
+    showToast(t.reminders.deletedSuccess, 'success');
     load();
   };
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
       <ScreenHeader
-        title="Reminder Servis"
-        subtitle={`${reminders.length} reminder aktif`}
+        title={t.reminders.title}
+        subtitle={`${reminders.length} ${t.reminders.activeReminders}`}
         showBack
         rightElement={
           <Pressable
@@ -114,8 +116,8 @@ export default function RemindersScreen() {
         ListEmptyComponent={
           <EmptyState
             icon="alarm-outline"
-            title="Belum ada reminder"
-            description="Buat reminder ganti oli atau servis berkala untuk pelanggan."
+            title={t.reminders.empty}
+            description={t.reminders.emptyDesc}
           />
         }
         renderItem={({ item }) => {
@@ -138,10 +140,10 @@ export default function RemindersScreen() {
                     <Badge
                       label={
                         overdue
-                          ? `Telat ${Math.abs(days)} hari`
+                          ? `${t.reminders.overdue} ${Math.abs(days)} ${t.reminders.overdueDay}`
                           : days === 0
-                            ? 'Hari ini'
-                            : `${days} hari lagi`
+                            ? t.reminders.today
+                            : `${days} ${t.reminders.daysLeft}`
                       }
                       variant={overdue ? 'danger' : upcoming ? 'warning' : 'info'}
                     />
@@ -173,41 +175,41 @@ export default function RemindersScreen() {
         onRequestClose={() => setAddOpen(false)}
       >
         <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
-          <ScreenHeader title="Reminder Baru" showBack />
+          <ScreenHeader title={t.reminders.newReminder} showBack />
           <ScrollView contentContainerStyle={{ padding: 20 }}>
             <Pressable onPress={() => setPickCustomerOpen(true)}>
               <Card>
                 <Text style={{ color: theme.colors.textSecondary, fontSize: 12 }}>
-                  PELANGGAN
+                  {t.transactions.sectionCustomer}
                 </Text>
                 <Text style={{ color: theme.colors.text, fontWeight: '700', marginTop: 4 }}>
-                  {selCustomer ? selCustomer.name : 'Pilih pelanggan...'}
+                  {selCustomer ? selCustomer.name : t.reminders.selectCustomer}
                 </Text>
               </Card>
             </Pressable>
             <View style={{ height: 12 }} />
             <Picker
-              label="Jenis Reminder"
+              label={t.reminders.reminderType}
               value={type}
               options={REMINDER_TYPES as unknown as string[]}
               onChange={(v) => setType(v as ReminderType)}
             />
             <Input
-              label="Berapa hari dari sekarang?"
+              label={t.reminders.daysFromNow}
               value={days}
               onChangeText={(v) => setDays(v.replace(/[^0-9]/g, ''))}
               keyboardType="numeric"
             />
             <Input
-              label="Catatan"
+              label={t.reminders.notes}
               value={notes}
               onChangeText={setNotes}
-              placeholder="Opsional"
+              placeholder={t.reminders.optional}
               multiline
               numberOfLines={2}
               style={{ minHeight: 60, textAlignVertical: 'top' }}
             />
-            <Button title="Simpan" size="lg" fullWidth onPress={submit} />
+            <Button title={t.common.save} size="lg" fullWidth onPress={submit} />
           </ScrollView>
         </View>
       </Modal>
@@ -219,7 +221,7 @@ export default function RemindersScreen() {
         onRequestClose={() => setPickCustomerOpen(false)}
       >
         <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
-          <ScreenHeader title="Pilih Pelanggan" showBack />
+          <ScreenHeader title={t.reminders.pickCustomer} showBack />
           <SearchBar value={customerSearch} onChangeText={setCustomerSearch} />
           <FlatList
             data={filteredCustomers}

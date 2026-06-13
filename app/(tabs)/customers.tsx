@@ -10,11 +10,13 @@ import { SearchBar } from '../../src/components/ui/SearchBar';
 import { SkeletonCard } from '../../src/components/ui/Skeleton';
 import { useTheme } from '../../src/contexts/ThemeContext';
 import { useCustomerStore } from '../../src/store/useCustomerStore';
+import { useTranslation } from '../../src/i18n';
 
 export default function CustomersScreen() {
   const router = useRouter();
   const { customers, loading, hasMore, search, setSearch, load, loadMore } = useCustomerStore();
   const { theme } = useTheme();
+  const t = useTranslation();
 
   useFocusEffect(
     useCallback(() => {
@@ -29,8 +31,8 @@ export default function CustomersScreen() {
   return (
     <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
       <ScreenHeader
-        title="Pelanggan"
-        subtitle={`${customers.length} pelanggan terdaftar`}
+        title={t.customers.title}
+        subtitle={`${customers.length} ${t.customers.registered}`}
         rightElement={
           <Pressable
             onPress={() => router.push('/customer-form')}
@@ -52,7 +54,7 @@ export default function CustomersScreen() {
       <SearchBar
         value={search}
         onChangeText={setSearch}
-        placeholder="Cari nama, plat, atau HP..."
+        placeholder={t.customers.searchPlaceholder}
       />
 
       {loading && customers.length === 0 ? (
@@ -81,8 +83,8 @@ export default function CustomersScreen() {
           ListEmptyComponent={
             <EmptyState
               icon="people-outline"
-              title="Belum ada pelanggan"
-              description="Tambahkan pelanggan pertama Anda untuk mulai mencatat servis."
+              title={t.customers.empty}
+              description={t.customers.emptyDesc}
             />
           }
           renderItem={({ item }) => {

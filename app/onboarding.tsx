@@ -12,36 +12,38 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Button } from '../src/components/ui/Button';
 import { theme } from '../src/constants/theme';
+import { useTranslation } from '../src/i18n';
 import { useAppStore } from '../src/store/useAppStore';
 
 const { width } = Dimensions.get('window');
 
-const slides = [
-  {
-    icon: 'speedometer-outline' as const,
-    title: 'Selamat Datang di MyGarage Lite',
-    desc: 'Manajemen bengkel modern, ringan, dan mudah digunakan untuk bengkel motor & mobil Anda.',
-    color: theme.colors.accent,
-  },
-  {
-    icon: 'people-outline' as const,
-    title: 'Kelola Pelanggan & Servis',
-    desc: 'Catat pelanggan, kendaraan, dan riwayat servis dalam satu aplikasi.',
-    color: theme.colors.blue,
-  },
-  {
-    icon: 'analytics-outline' as const,
-    title: 'Pantau Keuangan & Stok',
-    desc: 'Lihat pendapatan harian, stok sparepart, dan laporan langsung dari HP.',
-    color: theme.colors.success,
-  },
-];
-
 export default function Onboarding() {
   const router = useRouter();
+  const t = useTranslation();
   const setOnboardingDone = useAppStore((s) => s.setOnboardingDone);
   const [index, setIndex] = useState(0);
   const ref = useRef<FlatList>(null);
+
+  const slides = [
+    {
+      icon: 'speedometer-outline' as const,
+      title: t.onboarding.welcomeTitle,
+      desc: t.onboarding.welcomeDesc,
+      color: theme.colors.accent,
+    },
+    {
+      icon: 'people-outline' as const,
+      title: t.onboarding.slide2Title,
+      desc: t.onboarding.slide2Desc,
+      color: theme.colors.blue,
+    },
+    {
+      icon: 'analytics-outline' as const,
+      title: t.onboarding.slide3Title,
+      desc: t.onboarding.slide3Desc,
+      color: theme.colors.success,
+    },
+  ];
 
   const onMomentumEnd = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
     const i = Math.round(e.nativeEvent.contentOffset.x / width);
@@ -142,13 +144,13 @@ export default function Onboarding() {
 
       <View style={{ padding: 24, paddingBottom: 32, gap: 10 }}>
         <Button
-          title={index === slides.length - 1 ? 'Mulai Sekarang' : 'Lanjut'}
+          title={index === slides.length - 1 ? t.onboarding.startNow : t.common.next}
           onPress={next}
           size="lg"
           fullWidth
         />
         {index < slides.length - 1 && (
-          <Button title="Lewati" variant="ghost" onPress={finish} fullWidth />
+          <Button title={t.common.skip} variant="ghost" onPress={finish} fullWidth />
         )}
       </View>
     </SafeAreaView>

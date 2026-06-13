@@ -4,6 +4,7 @@ import { Alert, FlatList, Modal, Pressable, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../contexts/ThemeContext';
 import { sparepartService } from '../../services/sparepartService';
+import { useTranslation } from '../../i18n';
 import { Sparepart } from '../../types';
 import { formatCurrency } from '../../utils/currency';
 import { Button } from './Button';
@@ -22,6 +23,7 @@ const PAGE_SIZE = 20;
 export function AddSparepartSheet({ visible, onClose, onPick }: Props) {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
+  const t = useTranslation();
   const [items, setItems] = useState<Sparepart[]>([]);
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<Sparepart | null>(null);
@@ -102,7 +104,7 @@ export function AddSparepartSheet({ visible, onClose, onPick }: Props) {
 
   const submitCustom = async () => {
     if (!customName.trim() || !customBuyPrice.trim() || !customSellPrice.trim() || !customStock.trim()) {
-      Alert.alert('Peringatan', 'Mohon lengkapi semua data');
+      Alert.alert(t.common.warning, t.common.fillAllData);
       return;
     }
     try {
@@ -165,7 +167,7 @@ export function AddSparepartSheet({ visible, onClose, onPick }: Props) {
 
           <View style={{ paddingHorizontal: 20, marginBottom: 8 }}>
             <Text style={{ color: theme.colors.text, fontSize: 18, fontWeight: '800' }}>
-              Pilih Sparepart
+              {t.spareparts.pickSparepart}
             </Text>
           </View>
 
@@ -173,11 +175,11 @@ export function AddSparepartSheet({ visible, onClose, onPick }: Props) {
             <>
               <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center', paddingHorizontal: 16, marginBottom: 12 }}>
                 <View style={{ flex: 1 }}>
-                  <SearchBar 
-                    value={search} 
-                    onChangeText={setSearch} 
-                    placeholder="Cari sparepart..." 
-                    containerStyle={{ marginHorizontal: 0, marginBottom: 0 }} 
+                  <SearchBar
+                    value={search}
+                    onChangeText={setSearch}
+                    placeholder={t.spareparts.searchPlaceholder}
+                    containerStyle={{ marginHorizontal: 0, marginBottom: 0 }}
                   />
                 </View>
                 <Pressable
@@ -217,7 +219,7 @@ export function AddSparepartSheet({ visible, onClose, onPick }: Props) {
                   <Input
                     value={customName}
                     onChangeText={setCustomName}
-                    placeholder="Nama Sparepart"
+                    placeholder={t.spareparts.name}
                   />
                   <Pressable
                     onPress={() => setShowCategoryPicker(true)}
@@ -232,7 +234,7 @@ export function AddSparepartSheet({ visible, onClose, onPick }: Props) {
                     }}
                   >
                     <Text style={{ color: customCategory ? theme.colors.text : theme.colors.textSecondary }}>
-                      {customCategory || 'Pilih Kategori Sparepart'}
+                      {customCategory || t.spareparts.selectCategory}
                     </Text>
                   </Pressable>
                   <View style={{ flexDirection: 'row', gap: 12 }}>
@@ -240,7 +242,7 @@ export function AddSparepartSheet({ visible, onClose, onPick }: Props) {
                       <Input
                         value={customBuyPrice}
                         onChangeText={setCustomBuyPrice}
-                        placeholder="Harga Beli (Rp)"
+                        placeholder={t.spareparts.buyPrice}
                         keyboardType="numeric"
                       />
                     </View>
@@ -248,7 +250,7 @@ export function AddSparepartSheet({ visible, onClose, onPick }: Props) {
                       <Input
                         value={customSellPrice}
                         onChangeText={setCustomSellPrice}
-                        placeholder="Harga Jual (Rp)"
+                        placeholder={t.spareparts.sellPrice}
                         keyboardType="numeric"
                       />
                     </View>
@@ -258,7 +260,7 @@ export function AddSparepartSheet({ visible, onClose, onPick }: Props) {
                       <Input
                         value={customStock}
                         onChangeText={setCustomStock}
-                        placeholder="Stok"
+                        placeholder={t.spareparts.stock}
                         keyboardType="numeric"
                       />
                     </View>
@@ -266,13 +268,13 @@ export function AddSparepartSheet({ visible, onClose, onPick }: Props) {
                       <Input
                         value={customMinStock}
                         onChangeText={setCustomMinStock}
-                        placeholder="Minimum Stok"
+                        placeholder={t.spareparts.minStock}
                         keyboardType="numeric"
                       />
                     </View>
                   </View>
                   <Button
-                    title="Tambah Sparepart Baru"
+                    title={t.spareparts.addCustomSparepart}
                     fullWidth
                     onPress={submitCustom}
                     disabled={!customName.trim() || !customBuyPrice.trim() || !customSellPrice.trim() || !customStock.trim()}
@@ -290,19 +292,19 @@ export function AddSparepartSheet({ visible, onClose, onPick }: Props) {
                 onEndReachedThreshold={0.5}
                 ListFooterComponent={loading && items.length > 0 ? () => (
                   <Text style={{ color: theme.colors.textMuted, textAlign: 'center', padding: 12 }}>
-                    Memuat...
+                    {t.common.loading}
                   </Text>
                 ) : undefined}
                 ListEmptyComponent={
                   loading ? (
                     <Text style={{ color: theme.colors.textMuted, textAlign: 'center', padding: 12 }}>
-                      Memuat...
+                      {t.common.loading}
                     </Text>
                   ) : (
                     <EmptyState
                       icon="cube-outline"
-                      title="Tidak ditemukan"
-                      description="Coba kata kunci lain"
+                      title={t.spareparts.notFound}
+                      description={t.spareparts.notFoundDesc}
                     />
                   )
                 }
@@ -358,7 +360,7 @@ export function AddSparepartSheet({ visible, onClose, onPick }: Props) {
                               marginTop: 4,
                             }}
                           >
-                            {isOut ? 'STOK HABIS' : `Stok: ${item.stock}`} • {item.category}
+                            {isOut ? t.spareparts.outOfStockLabel : `${t.spareparts.stock}: ${item.stock}`} • {item.category}
                           </Text>
                         </View>
                       </Pressable>
@@ -407,7 +409,7 @@ export function AddSparepartSheet({ visible, onClose, onPick }: Props) {
                     marginTop: 2,
                   }}
                 >
-                  Stok tersisa: {selected.stock} • Harga: {formatCurrency(selected.sell_price)}
+                  {t.spareparts.stockRemaining}: {selected.stock} • {t.spareparts.price}: {formatCurrency(selected.sell_price)}
                 </Text>
               </View>
 
@@ -419,7 +421,7 @@ export function AddSparepartSheet({ visible, onClose, onPick }: Props) {
                   marginBottom: 8,
                 }}
               >
-                Jumlah
+                {t.spareparts.quantity}
               </Text>
               <View
                 style={{
@@ -485,7 +487,7 @@ export function AddSparepartSheet({ visible, onClose, onPick }: Props) {
                 }}
               >
                 <Text style={{ color: theme.colors.textSecondary, fontSize: 14 }}>
-                  Subtotal
+                  {t.spareparts.subtotal}
                 </Text>
                 <Text
                   style={{
@@ -500,14 +502,14 @@ export function AddSparepartSheet({ visible, onClose, onPick }: Props) {
 
               <View style={{ gap: 10, marginTop: 20 }}>
                 <Button
-                  title="Tambahkan ke Transaksi"
+                  title={t.spareparts.addToTransaction}
                   size="lg"
                   fullWidth
                   onPress={submit}
                   icon={<Ionicons name="checkmark-circle" size={18} color="#fff" />}
                 />
                 <Button
-                  title="Pilih Sparepart Lain"
+                  title={t.spareparts.pickOther}
                   variant="ghost"
                   fullWidth
                   onPress={() => setSelected(null)}
@@ -552,7 +554,7 @@ export function AddSparepartSheet({ visible, onClose, onPick }: Props) {
 
             <View style={{ paddingHorizontal: 20, marginBottom: 12 }}>
               <Text style={{ color: theme.colors.text, fontSize: 18, fontWeight: '800' }}>
-                Pilih Kategori
+                {t.spareparts.pickCategory}
               </Text>
             </View>
 
@@ -563,7 +565,7 @@ export function AddSparepartSheet({ visible, onClose, onPick }: Props) {
                   <Input
                     value={newCategory}
                     onChangeText={setNewCategory}
-                    placeholder="Kategori baru..."
+                    placeholder={t.spareparts.newCategoryPlaceholder}
                     containerStyle={{ marginBottom: 0 }}
                   />
                 </View>
@@ -631,7 +633,7 @@ export function AddSparepartSheet({ visible, onClose, onPick }: Props) {
 
             <View style={{ paddingHorizontal: 16, paddingBottom: 16 }}>
               <Button
-                title="Tutup"
+                title={t.common.close}
                 variant="ghost"
                 fullWidth
                 onPress={() => setShowCategoryPicker(false)}

@@ -9,6 +9,7 @@ import { ScreenHeader } from '../src/components/ui/ScreenHeader';
 import { VEHICLE_TYPES } from '../src/constants/config';
 import { useTheme } from '../src/contexts/ThemeContext';
 import { customerService } from '../src/services/customerService';
+import { useTranslation } from '../src/i18n';
 import { useAppStore } from '../src/store/useAppStore';
 import { useCustomerStore } from '../src/store/useCustomerStore';
 import { VehicleType } from '../src/types';
@@ -21,6 +22,7 @@ export default function CustomerForm() {
   const isEdit = !!id;
   const showToast = useAppStore((s) => s.showToast);
   const { theme } = useTheme();
+  const t = useTranslation();
   const { add, update, remove } = useCustomerStore();
 
   const [name, setName] = useState('');
@@ -49,7 +51,7 @@ export default function CustomerForm() {
 
   const validate = () => {
     const e: Record<string, string> = {};
-    if (isEmpty(name)) e.name = 'Nama wajib diisi';
+    if (isEmpty(name)) e.name = t.customers.nameRequired;
     setErrors(e);
     return Object.keys(e).length === 0;
   };
@@ -68,16 +70,16 @@ export default function CustomerForm() {
       };
       if (isEdit && id) {
         await update(id, input);
-        showToast('Pelanggan diperbarui', 'success');
+        showToast(t.customers.updatedSuccess, 'success');
         await InterstitialAd.show();
       } else {
         const createdCustomer = await add(input);
         useAppStore.getState().setLastAddedCustomerId(createdCustomer.id);
-        showToast('Pelanggan ditambahkan', 'success');
+        showToast(t.customers.addedSuccess, 'success');
       }
       router.back();
     } catch {
-      showToast('Gagal menyimpan', 'error');
+      showToast(t.customers.saveFailed, 'error');
     } finally {
       setLoading(false);
     }
@@ -87,41 +89,41 @@ export default function CustomerForm() {
     setConfirmDelete(false);
     if (!id) return;
     await remove(id);
-    showToast('Pelanggan dihapus', 'success');
+    showToast(t.customers.deletedSuccess, 'success');
     router.back();
   };
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
-      <ScreenHeader title={isEdit ? 'Edit Pelanggan' : 'Pelanggan Baru'} showBack />
+      <ScreenHeader title={isEdit ? t.customers.editCustomer : t.customers.newCustomer} showBack />
       <KeyboardAvoidingView
         behavior="padding"
         style={{ flex: 1 }}
       >
         <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 120, gap: 16 }} keyboardShouldPersistTaps="handled">
           <Input
-            label="Nama Pelanggan *"
+            label={`${t.customers.name} *`}
             value={name}
             onChangeText={setName}
-            placeholder="Mis. Budi Santoso"
+            placeholder={t.customers.namePlaceholder}
             error={errors.name}
           />
           <Input
-            label="Nomor HP"
+            label={t.customers.phone}
             value={phone}
             onChangeText={setPhone}
             placeholder="081234567890"
             keyboardType="phone-pad"
           />
           <Input
-            label="Plat Nomor"
+            label={t.customers.plate}
             value={plate}
             onChangeText={setPlate}
             placeholder="B 1234 ABC"
             autoCapitalize="characters"
           />
           <Picker
-            label="Jenis Kendaraan"
+            label={t.customers.vehicleType}
             value={vehicleType}
             options={VEHICLE_TYPES}
             onChange={(v) => setVehicleType(v as VehicleType)}
@@ -131,16 +133,16 @@ export default function CustomerForm() {
             }}
           />
           <Input
-            label="Merk / Tipe Kendaraan"
+            label={t.customers.vehicleBrand}
             value={vehicleBrand}
             onChangeText={setVehicleBrand}
-            placeholder="Mis. Honda Vario 150"
+            placeholder={t.customers.vehicleBrandPlaceholder}
           />
           <Input
-            label="Catatan"
+            label={t.customers.notes}
             value={notes}
             onChangeText={setNotes}
-            placeholder="Catatan tambahan (opsional)"
+            placeholder={t.customers.notesPlaceholder}
             multiline
             numberOfLines={3}
             style={{ minHeight: 80, textAlignVertical: 'top' }}
@@ -148,7 +150,7 @@ export default function CustomerForm() {
 
           <View style={{ marginTop: 12, gap: 10 }}>
             <Button
-              title={isEdit ? 'Simpan Perubahan' : 'Tambah Pelanggan'}
+              title={isEdit ? t.common.saveChanges : t.customers.addCustomer}
               onPress={save}
               loading={loading}
               size="lg"
@@ -156,7 +158,7 @@ export default function CustomerForm() {
             />
             {isEdit && (
               <Button
-                title="Hapus Pelanggan"
+                title={t.customers.deleteCustomer}
                 variant="danger"
                 onPress={() => setConfirmDelete(true)}
                 fullWidth
@@ -168,9 +170,9 @@ export default function CustomerForm() {
 
       <ConfirmDialog
         visible={confirmDelete}
-        title="Hapus Pelanggan?"
-        message="Data pelanggan dan riwayat servis terkait tidak dapat dikembalikan."
-        confirmText="Hapus"
+        title={t.customers.deleteConfirmTitle}
+        message={t.customers.deleteConfirmMessage}
+        confirmText={t.common.delete}
         destructive
         onConfirm={handleDelete}
         onCancel={() => setConfirmDelete(false)}

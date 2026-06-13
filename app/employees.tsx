@@ -7,11 +7,13 @@ import { Card } from '../src/components/ui/Card';
 import { EmptyState } from '../src/components/ui/EmptyState';
 import { ScreenHeader } from '../src/components/ui/ScreenHeader';
 import { useTheme } from '../src/contexts/ThemeContext';
+import { useTranslation } from '../src/i18n';
 import { useEmployeeStore } from '../src/store/useEmployeeStore';
 
 export default function EmployeesScreen() {
   const router = useRouter();
   const { theme } = useTheme();
+  const t = useTranslation();
   const { employees, load } = useEmployeeStore();
 
   useFocusEffect(
@@ -25,8 +27,8 @@ export default function EmployeesScreen() {
   return (
     <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
       <ScreenHeader
-        title="Karyawan"
-        subtitle={`${activeCount} aktif dari ${employees.length} total`}
+        title={t.employees.title}
+        subtitle={`${activeCount} ${t.employees.activeOf} ${employees.length} total`}
         showBack
         rightElement={
           <Pressable
@@ -58,8 +60,8 @@ export default function EmployeesScreen() {
         ListEmptyComponent={
           <EmptyState
             icon="people-outline"
-            title="Belum ada karyawan"
-            description="Tambahkan karyawan/mekanik untuk dipakai di transaksi servis."
+            title={t.employees.empty}
+            description={t.employees.emptyDesc}
           />
         }
         renderItem={({ item }) => {
@@ -138,7 +140,7 @@ export default function EmployeesScreen() {
                         {item.role.toUpperCase()}
                       </Text>
                     </View>
-                    {!isActive ? <Badge label="Nonaktif" variant="danger" /> : null}
+                    {!isActive ? <Badge label={t.employees.inactive} variant="danger" /> : null}
                   </View>
                   {item.phone ? (
                     <View

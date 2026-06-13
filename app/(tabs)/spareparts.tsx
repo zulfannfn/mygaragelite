@@ -11,12 +11,14 @@ import { SkeletonCard } from '../../src/components/ui/Skeleton';
 import { useTheme } from '../../src/contexts/ThemeContext';
 import { useSparepartStore } from '../../src/store/useSparepartStore';
 import { formatCurrency } from '../../src/utils/currency';
+import { useTranslation } from '../../src/i18n';
 
 type FilterKey = 'all' | 'low' | 'out' | string;
 
 export default function SparepartsScreen() {
   const router = useRouter();
   const { theme } = useTheme();
+  const t = useTranslation();
   const { spareparts, loading, hasMore, search, setSearch, load, loadMore } = useSparepartStore();
   const [filter, setFilter] = useState<FilterKey>('all');
   const [filterModalOpen, setFilterModalOpen] = useState(false);
@@ -59,17 +61,17 @@ export default function SparepartsScreen() {
     color?: string;
     icon: 'apps' | 'warning' | 'close-circle';
   }[] = [
-    { key: 'all', label: 'Semua', count: spareparts.length, icon: 'apps' },
+    { key: 'all', label: t.common.all, count: spareparts.length, icon: 'apps' },
     {
       key: 'low',
-      label: 'Stok Menipis',
+      label: t.spareparts.lowStock,
       count: lowStockCount,
       color: theme.colors.warning,
       icon: 'warning',
     },
     {
       key: 'out',
-      label: 'Habis',
+      label: t.spareparts.outOfStock,
       count: outStockCount,
       color: theme.colors.danger,
       icon: 'close-circle',
@@ -85,8 +87,8 @@ export default function SparepartsScreen() {
   return (
     <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
       <ScreenHeader
-        title="Sparepart"
-        subtitle={`${spareparts.length} item${lowStockCount > 0 ? ` • ⚠️ ${lowStockCount} stok menipis` : ''}`}
+        title={t.spareparts.title}
+        subtitle={`${spareparts.length} ${t.spareparts.items}${lowStockCount > 0 ? ` • ⚠️ ${lowStockCount} ${t.spareparts.lowStockWarning}` : ''}`}
         rightElement={
           <Pressable
             onPress={() => router.push('/sparepart-form')}
@@ -108,7 +110,7 @@ export default function SparepartsScreen() {
       <SearchBar
         value={search}
         onChangeText={setSearch}
-        placeholder="Cari sparepart..."
+        placeholder={t.spareparts.searchPlaceholder}
         rightElement={
           <Pressable
             onPress={() => {
@@ -241,11 +243,11 @@ export default function SparepartsScreen() {
           ListEmptyComponent={
             <EmptyState
               icon="cube-outline"
-              title={filter === 'all' ? 'Belum ada sparepart' : 'Tidak ada item di filter ini'}
+              title={filter === 'all' ? t.spareparts.empty : t.spareparts.emptyFilter}
               description={
                 filter === 'all'
-                  ? 'Tambahkan sparepart untuk mulai mengelola stok.'
-                  : 'Coba pilih filter lain atau tambahkan sparepart baru.'
+                  ? t.spareparts.emptyDesc
+                  : t.spareparts.emptyFilterDesc
               }
             />
           }
@@ -340,10 +342,10 @@ export default function SparepartsScreen() {
                         }}
                       >
                         <Text style={{ color: theme.colors.textMuted, fontSize: 10, fontWeight: '700', letterSpacing: 0.5 }}>
-                          STOK
+                          {t.spareparts.stockLabel}
                         </Text>
                         <Text style={{ color: stockColor, fontSize: 12, fontWeight: '800' }}>
-                          {isOut ? 'HABIS' : `${item.stock} pcs`}
+                          {isOut ? t.spareparts.outLabel : `${item.stock} ${t.common.pieces}`}
                         </Text>
                       </View>
                       <View
@@ -405,12 +407,12 @@ export default function SparepartsScreen() {
                 marginBottom: 16,
               }}
             >
-              Filter Sparepart
+              {t.spareparts.filterTitle}
             </Text>
 
             {/* Status */}
             <Text style={{ color: theme.colors.textSecondary, fontSize: 12, fontWeight: '600', marginBottom: 8 }}>
-              Status Stok
+              {t.spareparts.stockStatus}
             </Text>
             <View style={{ flexDirection: 'row', gap: 8, marginBottom: 16 }}>
               {statusChips.map((chip) => {
@@ -462,7 +464,7 @@ export default function SparepartsScreen() {
                     marginBottom: 8,
                   }}
                 >
-                  Kategori
+                  {t.spareparts.category}
                 </Text>
                 <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
                   {categoryChips.map((chip) => {
@@ -513,7 +515,7 @@ export default function SparepartsScreen() {
                   alignItems: 'center',
                 }}
               >
-                <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>Terapkan</Text>
+                <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>{t.common.apply}</Text>
               </Pressable>
               <Pressable
                 onPress={() => {
@@ -529,7 +531,7 @@ export default function SparepartsScreen() {
                   alignItems: 'center',
                 }}
               >
-                <Text style={{ color: theme.colors.textSecondary, fontWeight: '700', fontSize: 14 }}>Reset</Text>
+                <Text style={{ color: theme.colors.textSecondary, fontWeight: '700', fontSize: 14 }}>{t.common.reset}</Text>
               </Pressable>
             </View>
           </View>

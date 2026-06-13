@@ -7,6 +7,7 @@ import { Input } from '../src/components/ui/Input';
 import { ScreenHeader } from '../src/components/ui/ScreenHeader';
 import { useTheme } from '../src/contexts/ThemeContext';
 import { serviceService } from '../src/services/serviceService';
+import { useTranslation } from '../src/i18n';
 import { useAppStore } from '../src/store/useAppStore';
 import { InterstitialAd } from '../src/components/ui/AdBanner';
 import { isEmpty } from '../src/utils/validation';
@@ -17,6 +18,7 @@ export default function ServiceForm() {
   const isEdit = !!id;
   const showToast = useAppStore((s) => s.showToast);
   const { theme } = useTheme();
+  const t = useTranslation();
 
   const [name, setName] = useState('');
   const [price, setPrice] = useState('');
@@ -36,8 +38,8 @@ export default function ServiceForm() {
 
   const validate = () => {
     const e: Record<string, string> = {};
-    if (isEmpty(name)) e.name = 'Nama jasa wajib diisi';
-    if (parseInt(price || '0', 10) <= 0) e.price = 'Harga harus > 0';
+    if (isEmpty(name)) e.name = t.services.nameRequired;
+    if (parseInt(price || '0', 10) <= 0) e.price = t.services.priceRequired;
     setErrors(e);
     return Object.keys(e).length === 0;
   };
@@ -52,15 +54,15 @@ export default function ServiceForm() {
       };
       if (isEdit && id) {
         await serviceService.update(id, input);
-        showToast('Jasa diperbarui', 'success');
+        showToast(t.services.updatedSuccess, 'success');
         await InterstitialAd.show();
       } else {
         await serviceService.create(input);
-        showToast('Jasa ditambahkan', 'success');
+        showToast(t.services.addedSuccess, 'success');
       }
       router.back();
     } catch {
-      showToast('Gagal menyimpan', 'error');
+      showToast(t.services.saveFailed, 'error');
     } finally {
       setLoading(false);
     }
@@ -70,27 +72,27 @@ export default function ServiceForm() {
     setConfirmDelete(false);
     if (!id) return;
     await serviceService.delete(id);
-    showToast('Jasa dihapus', 'success');
+    showToast(t.services.deletedSuccess, 'success');
     router.back();
   };
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
-      <ScreenHeader title={isEdit ? 'Edit Jasa' : 'Jasa Baru'} showBack />
+      <ScreenHeader title={isEdit ? t.services.editService : t.services.newService} showBack />
       <KeyboardAvoidingView
         behavior="padding"
         style={{ flex: 1 }}
       >
         <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 120, gap: 16 }} keyboardShouldPersistTaps="handled">
           <Input
-            label="Nama Jasa *"
+            label={`${t.services.name} *`}
             value={name}
             onChangeText={setName}
-            placeholder="Mis. Ganti Oli, Tune Up"
+            placeholder={t.services.namePlaceholder}
             error={errors.name}
           />
           <Input
-            label="Harga (Rp) *"
+            label={`${t.services.price} *`}
             value={price}
             onChangeText={(v) => setPrice(v.replace(/[^0-9]/g, ''))}
             keyboardType="numeric"
@@ -100,7 +102,7 @@ export default function ServiceForm() {
 
           <View style={{ marginTop: 12, gap: 10 }}>
             <Button
-              title={isEdit ? 'Simpan Perubahan' : 'Tambah Jasa'}
+              title={isEdit ? t.common.saveChanges : t.services.addService}
               onPress={save}
               loading={loading}
               size="lg"
@@ -108,7 +110,7 @@ export default function ServiceForm() {
             />
             {isEdit && (
               <Button
-                title="Hapus Jasa"
+                title={t.services.deleteService}
                 variant="danger"
                 onPress={() => setConfirmDelete(true)}
                 fullWidth
@@ -120,9 +122,9 @@ export default function ServiceForm() {
 
       <ConfirmDialog
         visible={confirmDelete}
-        title="Hapus Jasa?"
-        message="Data ini akan dihapus permanen."
-        confirmText="Hapus"
+        title={t.services.deleteTitle}
+        message={t.services.deleteMessage}
+        confirmText={t.common.delete}
         destructive
         onConfirm={handleDelete}
         onCancel={() => setConfirmDelete(false)}

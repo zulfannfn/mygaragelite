@@ -14,6 +14,7 @@ import { useAppStore } from '../../src/store/useAppStore';
 import { CategoryStats, PaymentMethodTotal, ReportData, TopMechanic, TopService, TopSparepart } from '../../src/types';
 import { formatCompactCurrency, formatCurrency } from '../../src/utils/currency';
 import { AdBanner, InterstitialAd } from '../../src/components/ui/AdBanner';
+import { useTranslation } from '../../src/i18n';
 type SectionKey = 'service' | 'sparepart' | 'mechanic' | 'paymentMethod' | 'category';
 
 interface DateRange {
@@ -190,6 +191,7 @@ function Chart({ daily, maxDaily, theme }: { daily: ReportData[]; maxDaily: numb
 export default function ReportsScreen() {
   const showToast = useAppStore((s) => s.showToast);
   const { theme } = useTheme();
+  const t = useTranslation();
   const [daily, setDaily] = useState<ReportData[]>([]);
   const [monthly, setMonthly] = useState<ReportData[]>([]);
   const [topSp, setTopSp] = useState<TopSparepart[]>([]);
@@ -267,15 +269,15 @@ export default function ReportsScreen() {
       setExporting(true);
       const tx = await transactionService.getAllWithLineItems();
       if (tx.length === 0) {
-        showToast('Tidak ada transaksi untuk diexport', 'error');
+        showToast(t.reports.exportCSVEmpty, 'error');
         return;
       }
       await exportService.exportTransactionsToCSV(tx);
-      showToast('Berhasil export CSV', 'success');
+      showToast(t.reports.exportCSVSuccess, 'success');
       await InterstitialAd.show();
     } catch (e: any) {
       console.error('Export error:', e);
-      showToast('Gagal export: ' + (e?.message ?? 'Unknown error'), 'error');
+      showToast(t.reports.exportCSVFailed + ': ' + (e?.message ?? 'Unknown error'), 'error');
     } finally {
       setExporting(false);
     }
@@ -286,14 +288,14 @@ export default function ReportsScreen() {
       style={{ flex: 1, backgroundColor: theme.colors.background }}
       contentContainerStyle={{ paddingBottom: 100 + (Platform.OS === 'android' ? 48 : 34) }}
     >
-      <ScreenHeader title="Laporan" subtitle="Statistik & analitik bengkel" />
+      <ScreenHeader title={t.reports.title} subtitle={t.reports.subtitle} />
 
       {/* Summary cards */}
       <View style={{ flexDirection: 'row', paddingHorizontal: 16, gap: 10, marginBottom: 12 }}>
         {/* HARI INI */}
         <Card style={{ flex: 1 }} padding={14}>
           <Text style={{ color: theme.colors.textSecondary, fontSize: 11, fontWeight: '600' }}>
-            HARI INI
+            {t.reports.today}
           </Text>
           <View style={{ marginTop: 8, gap: 8 }}>
             <View>
@@ -313,7 +315,7 @@ export default function ReportsScreen() {
         {/* 7 HARI */}
         <Card style={{ flex: 1 }} padding={14}>
           <Text style={{ color: theme.colors.textSecondary, fontSize: 11, fontWeight: '600' }}>
-            7 HARI
+            {t.reports.sevenDays}
           </Text>
           <View style={{ marginTop: 8, gap: 8 }}>
             <View>
@@ -333,7 +335,7 @@ export default function ReportsScreen() {
         {/* BULAN INI */}
         <Card style={{ flex: 1 }} padding={14}>
           <Text style={{ color: theme.colors.textSecondary, fontSize: 11, fontWeight: '600' }}>
-            BULAN INI
+            {t.reports.thisMonth}
           </Text>
           <View style={{ marginTop: 8, gap: 8 }}>
             <View>
@@ -357,7 +359,7 @@ export default function ReportsScreen() {
         <Card>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
             <Text style={{ color: theme.colors.text, fontSize: 15, fontWeight: '700' }}>
-              Pendapatan 7 Hari Terakhir
+              {t.reports.last7DaysRevenue}
             </Text>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
@@ -374,7 +376,7 @@ export default function ReportsScreen() {
             <Skeleton height={120} />
           ) : daily.length === 0 || maxDaily === 0 ? (
             <Text style={{ color: theme.colors.textMuted, textAlign: 'center', paddingVertical: 40 }}>
-              Belum ada data
+              {t.reports.noData}
             </Text>
           ) : (
             <Chart daily={daily} maxDaily={maxDaily} theme={theme} />
@@ -393,7 +395,7 @@ export default function ReportsScreen() {
               marginBottom: 12,
             }}
           >
-            Pendapatan Per Bulan
+            {t.reports.monthlyRevenue}
           </Text>
           {loading ? (
             <Skeleton height={80} />
@@ -401,7 +403,7 @@ export default function ReportsScreen() {
             <ScrollView nestedScrollEnabled={true} style={{ maxHeight: 250 }} showsVerticalScrollIndicator={false}>
               {monthly.filter(m => m.serviceRevenue > 0 || m.retailRevenue > 0).length === 0 ? (
                 <Text style={{ color: theme.colors.textMuted, textAlign: 'center', padding: 12 }}>
-                  Belum ada data
+                  {t.reports.noData}
                 </Text>
               ) : (
                 <View style={{ gap: 0 }}>
@@ -464,7 +466,7 @@ export default function ReportsScreen() {
                 fontWeight: '700',
               }}
             >
-              💳 Metode Pembayaran
+              💳 {t.reports.paymentMethods}
             </Text>
             <Pressable
               onPress={() => {
@@ -488,7 +490,7 @@ export default function ReportsScreen() {
               <Text style={{ color: theme.colors.textSecondary, fontSize: 11 }}>
                 {ranges.paymentMethod.start || ranges.paymentMethod.end
                   ? `${formatShortDate(ranges.paymentMethod.start)} - ${formatShortDate(ranges.paymentMethod.end)}`
-                  : 'Semua'}
+                  : t.common.all}
               </Text>
             </Pressable>
           </View>
@@ -496,9 +498,9 @@ export default function ReportsScreen() {
           {/* Type toggle chips */}
           <View style={{ flexDirection: 'row', gap: 6, marginBottom: 12 }}>
             {[
-              { key: 'all', label: 'Semua' },
+              { key: 'all', label: t.common.all },
               { key: 'service', label: 'Service' },
-              { key: 'retail', label: 'Kasir' },
+              { key: 'retail', label: t.dashboard.cashier },
             ].map((chip) => {
               const active = paymentMethodType === (chip.key as typeof paymentMethodType);
               return (
@@ -530,7 +532,7 @@ export default function ReportsScreen() {
             <Skeleton height={40} />
           ) : paymentMethodData.length === 0 ? (
             <Text style={{ color: theme.colors.textMuted, textAlign: 'center', padding: 12 }}>
-              Belum ada data
+              {t.reports.noData}
             </Text>
           ) : (
             <View style={{ gap: 0 }}>
@@ -563,7 +565,7 @@ export default function ReportsScreen() {
                         {pm.method}
                       </Text>
                       <Text style={{ color: theme.colors.textMuted, fontSize: 11 }}>
-                        {pm.count} transaksi
+                        {pm.count} {t.reports.transactions}
                       </Text>
                     </View>
                   </View>
@@ -595,7 +597,7 @@ export default function ReportsScreen() {
                 fontWeight: '700',
               }}
             >
-              🏆 Jasa Terlaris
+              🏆 {t.reports.topServices}
             </Text>
             <Pressable
               onPress={() => {
@@ -617,7 +619,7 @@ export default function ReportsScreen() {
             >
               <Ionicons name="funnel" size={12} color={theme.colors.textSecondary} />
               <Text style={{ color: theme.colors.textSecondary, fontSize: 11 }}>
-                {topSvcSort === 'sold' ? 'Terjual' : 'Pendapatan'}
+                {topSvcSort === 'sold' ? t.reports.sold : t.reports.revenue}
                 {' · '}
                 {ranges.service.start || ranges.service.end
                   ? `${formatShortDate(ranges.service.start)} - ${formatShortDate(ranges.service.end)}`
@@ -629,7 +631,7 @@ export default function ReportsScreen() {
             <Skeleton height={60} />
           ) : topSvc.length === 0 ? (
             <Text style={{ color: theme.colors.textMuted, textAlign: 'center', padding: 12 }}>
-              Belum ada data
+              {t.reports.noData}
             </Text>
           ) : (
             <ScrollView nestedScrollEnabled={true} style={{ maxHeight: 250 }} showsVerticalScrollIndicator={false}>
@@ -665,7 +667,7 @@ export default function ReportsScreen() {
                       {sv.name}
                     </Text>
                     <Text style={{ color: theme.colors.textMuted, fontSize: 11 }}>
-                      Terjual: {sv.totalSold}
+                      {t.reports.sold}: {sv.totalSold}
                     </Text>
                   </View>
                   <Text style={{ color: theme.colors.accent, fontSize: 13, fontWeight: '700' }}>
@@ -696,7 +698,7 @@ export default function ReportsScreen() {
                 fontWeight: '700',
               }}
             >
-              🏆 Sparepart Terlaris
+              🏆 {t.reports.topSpareparts}
             </Text>
             <Pressable
               onPress={() => {
@@ -718,7 +720,7 @@ export default function ReportsScreen() {
             >
               <Ionicons name="funnel" size={12} color={theme.colors.textSecondary} />
               <Text style={{ color: theme.colors.textSecondary, fontSize: 11 }}>
-                {topSpSort === 'sold' ? 'Terjual' : 'Pendapatan'}
+                {topSpSort === 'sold' ? t.reports.sold : t.reports.revenue}
                 {' · '}
                 {ranges.sparepart.start || ranges.sparepart.end
                   ? `${formatShortDate(ranges.sparepart.start)} - ${formatShortDate(ranges.sparepart.end)}`
@@ -729,9 +731,9 @@ export default function ReportsScreen() {
           {/* Type filter chips */}
           <View style={{ flexDirection: 'row', gap: 6, marginBottom: 10 }}>
             {[
-              { key: 'all', label: 'Semua' },
+              { key: 'all', label: t.common.all },
               { key: 'service', label: 'Service' },
-              { key: 'retail', label: 'Kasir' },
+              { key: 'retail', label: t.dashboard.cashier },
             ].map((chip) => {
               const active = topSpType === (chip.key as typeof topSpType);
               return (
@@ -764,7 +766,7 @@ export default function ReportsScreen() {
             <Skeleton height={60} />
           ) : topSp.length === 0 ? (
             <Text style={{ color: theme.colors.textMuted, textAlign: 'center', padding: 12 }}>
-              Belum ada data
+              {t.reports.noData}
             </Text>
           ) : (
             <ScrollView nestedScrollEnabled={true} style={{ maxHeight: 250 }} showsVerticalScrollIndicator={false}>
@@ -800,7 +802,7 @@ export default function ReportsScreen() {
                       {sp.name}
                     </Text>
                     <Text style={{ color: theme.colors.textMuted, fontSize: 11 }}>
-                      Terjual: {sp.totalSold}
+                      {t.reports.sold}: {sp.totalSold}
                     </Text>
                   </View>
                   <Text style={{ color: theme.colors.accent, fontSize: 13, fontWeight: '700' }}>
@@ -831,7 +833,7 @@ export default function ReportsScreen() {
                 fontWeight: '700',
               }}
             >
-              📦 Pendapatan per Kategori
+              📦 {t.reports.revenueByCategory}
             </Text>
             <Pressable
               onPress={() => {
@@ -865,7 +867,7 @@ export default function ReportsScreen() {
             <Skeleton height={150} />
           ) : categoryStats.length === 0 ? (
             <Text style={{ color: theme.colors.textMuted, textAlign: 'center', paddingVertical: 20 }}>
-              Belum ada data
+              {t.reports.noData}
             </Text>
           ) : (
             <ScrollView nestedScrollEnabled={true} style={{ maxHeight: 200 }} showsVerticalScrollIndicator={false}>
@@ -886,7 +888,7 @@ export default function ReportsScreen() {
                       {cat.category}
                     </Text>
                     <Text style={{ color: theme.colors.textMuted, fontSize: 11, marginTop: 2 }}>
-                      {cat.itemsSold} item terjual
+                      {cat.itemsSold} {t.reports.itemsSold}
                     </Text>
                   </View>
                   <Text
@@ -924,7 +926,7 @@ export default function ReportsScreen() {
                 fontWeight: '700',
               }}
             >
-              🏆 Mekanik Perform
+              🏆 {t.reports.topMechanics}
             </Text>
             <Pressable
               onPress={() => {
@@ -958,7 +960,7 @@ export default function ReportsScreen() {
             <Skeleton height={60} />
           ) : topMech.length === 0 ? (
             <Text style={{ color: theme.colors.textMuted, textAlign: 'center', padding: 12 }}>
-              Belum ada data
+              {t.reports.noData}
             </Text>
           ) : (
             <ScrollView nestedScrollEnabled={true} style={{ maxHeight: 250 }} showsVerticalScrollIndicator={false}>
@@ -992,7 +994,7 @@ export default function ReportsScreen() {
                       {mech.name}
                     </Text>
                     <Text style={{ color: theme.colors.textMuted, fontSize: 11 }}>
-                      {mech.transactionCount} transaksi
+                      {mech.transactionCount} {t.reports.transactions}
                     </Text>
                   </View>
                   <Text style={{ color: theme.colors.accent, fontSize: 13, fontWeight: '700' }}>
@@ -1041,13 +1043,13 @@ export default function ReportsScreen() {
                   marginBottom: 16,
                 }}
               >
-                Urutkan Berdasarkan
+                {t.reports.sortBy}
               </Text>
             )}
             {sortModal !== 'mechanic' && sortModal !== 'paymentMethod' &&
               [
-                { key: 'sold', label: 'Terjual Terbanyak', icon: 'cart' },
-                { key: 'revenue', label: 'Pendapatan Terbesar', icon: 'cash' },
+                { key: 'sold', label: t.reports.mostSold, icon: 'cart' },
+                { key: 'revenue', label: t.reports.highestRevenue, icon: 'cash' },
               ].map((opt) => {
                 const active =
                   sortModal === 'service'
@@ -1116,12 +1118,12 @@ export default function ReportsScreen() {
                 marginBottom: 10,
               }}
             >
-              Rentang Tanggal
+              {t.transactions.dateRange}
             </Text>
             <View style={{ gap: 10 }}>
               <View>
                 <Text style={{ color: theme.colors.textSecondary, fontSize: 12, marginBottom: 6 }}>
-                  Dari
+                  {t.transactions.from}
                 </Text>
                 <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
                   {(['d', 'm', 'y'] as const).map((k) => (
@@ -1154,7 +1156,7 @@ export default function ReportsScreen() {
               </View>
               <View>
                 <Text style={{ color: theme.colors.textSecondary, fontSize: 12, marginBottom: 6 }}>
-                  Sampai
+                  {t.transactions.to}
                 </Text>
                 <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
                   {(['d', 'm', 'y'] as const).map((k) => (
@@ -1239,7 +1241,7 @@ export default function ReportsScreen() {
       {/* Export */}
       <View style={{ paddingHorizontal: 16, marginTop: 8, gap: 10 }}>
         <Button
-          title="Export CSV / Excel"
+          title={t.reports.exportCSV}
           variant="secondary"
           onPress={exportCSV}
           loading={exporting}

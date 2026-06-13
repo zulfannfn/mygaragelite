@@ -3,10 +3,12 @@ import { Tabs } from 'expo-router';
 import React from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../src/contexts/ThemeContext';
+import { useTranslation } from '../../src/i18n';
 
 export default function TabsLayout() {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
+  const t = useTranslation();
 
   return (
     <Tabs
@@ -28,35 +30,35 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Dashboard',
+          title: t.nav.dashboard,
           tabBarIcon: ({ color, size }) => <Ionicons name="grid" size={size} color={color} />,
         }}
       />
       <Tabs.Screen
         name="customers"
         options={{
-          title: 'Pelanggan',
+          title: t.nav.customers,
           tabBarIcon: ({ color, size }) => <Ionicons name="people" size={size} color={color} />,
         }}
       />
       <Tabs.Screen
         name="transactions"
         options={{
-          title: 'Transaksi',
+          title: t.nav.transactions,
           tabBarIcon: ({ color, size }) => <Ionicons name="receipt" size={size} color={color} />,
         }}
       />
       <Tabs.Screen
         name="spareparts"
         options={{
-          title: 'Sparepart',
+          title: t.nav.spareparts,
           tabBarIcon: ({ color, size }) => <Ionicons name="cube" size={size} color={color} />,
         }}
       />
       <Tabs.Screen
         name="reports"
         options={{
-          title: 'Laporan',
+          title: t.nav.reports,
           tabBarIcon: ({ color, size }) => <Ionicons name="bar-chart" size={size} color={color} />,
         }}
       />

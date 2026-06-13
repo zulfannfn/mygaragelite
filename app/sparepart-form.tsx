@@ -9,6 +9,7 @@ import { ScreenHeader } from '../src/components/ui/ScreenHeader';
 import { SPAREPART_CATEGORIES } from '../src/constants/config';
 import { useTheme } from '../src/contexts/ThemeContext';
 import { sparepartService } from '../src/services/sparepartService';
+import { useTranslation } from '../src/i18n';
 import { useAppStore } from '../src/store/useAppStore';
 import { useSparepartStore } from '../src/store/useSparepartStore';
 import { InterstitialAd } from '../src/components/ui/AdBanner';
@@ -21,6 +22,7 @@ export default function SparepartForm() {
   const isEdit = !!id;
   const showToast = useAppStore((s) => s.showToast);
   const { theme } = useTheme();
+  const t = useTranslation();
   const { add, update, remove } = useSparepartStore();
 
   const [name, setName] = useState('');
@@ -63,9 +65,9 @@ export default function SparepartForm() {
 
   const validate = () => {
     const e: Record<string, string> = {};
-    if (isEmpty(name)) e.name = 'Nama wajib diisi';
-    if (parseCurrency(sellPrice) <= 0) e.sellPrice = 'Harga jual harus > 0';
-    if (showCustomCategory && isEmpty(customCategory)) e.customCategory = 'Kategori baru wajib diisi';
+    if (isEmpty(name)) e.name = t.spareparts.nameRequired;
+    if (parseCurrency(sellPrice) <= 0) e.sellPrice = t.spareparts.sellPriceRequired;
+    if (showCustomCategory && isEmpty(customCategory)) e.customCategory = t.common.required;
     setErrors(e);
     return Object.keys(e).length === 0;
   };
@@ -85,15 +87,15 @@ export default function SparepartForm() {
       };
       if (isEdit && id) {
         await update(id, input);
-        showToast('Sparepart diperbarui', 'success');
+        showToast(t.spareparts.updatedSuccess, 'success');
         await InterstitialAd.show();
       } else {
         await add(input);
-        showToast('Sparepart ditambahkan', 'success');
+        showToast(t.spareparts.addedSuccess, 'success');
       }
       router.back();
     } catch {
-      showToast('Gagal menyimpan', 'error');
+      showToast(t.spareparts.saveFailed, 'error');
     } finally {
       setLoading(false);
     }
@@ -103,27 +105,27 @@ export default function SparepartForm() {
     setConfirmDelete(false);
     if (!id) return;
     await remove(id);
-    showToast('Sparepart dihapus', 'success');
+    showToast(t.spareparts.deletedSuccess, 'success');
     router.back();
   };
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
-      <ScreenHeader title={isEdit ? 'Edit Sparepart' : 'Sparepart Baru'} showBack />
+      <ScreenHeader title={isEdit ? t.spareparts.editSparepart : t.spareparts.newSparepart} showBack />
       <KeyboardAvoidingView
         behavior="padding"
         style={{ flex: 1 }}
       >
         <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 120, gap: 16 }} keyboardShouldPersistTaps="handled">
           <Input
-            label="Nama Sparepart *"
+            label={`${t.spareparts.name} *`}
             value={name}
             onChangeText={setName}
-            placeholder="Mis. Oli Mesin Shell 1L"
+            placeholder={t.spareparts.namePlaceholder}
             error={errors.name}
           />
           <Picker
-            label="Kategori"
+            label={t.spareparts.categoryLabel}
             value={category}
             options={[...SPAREPART_CATEGORIES, ...existingCustomCategories, 'Tambah Kategori Baru']}
             optionIcons={{
@@ -151,17 +153,17 @@ export default function SparepartForm() {
           />
           {showCustomCategory && (
             <Input
-              label="Nama Kategori Baru *"
+              label={`${t.spareparts.newCategoryName} *`}
               value={customCategory}
               onChangeText={setCustomCategory}
-              placeholder="Masukkan nama kategori"
+              placeholder={t.spareparts.categoryPlaceholder}
               error={errors.customCategory}
             />
           )}
           <View style={{ flexDirection: 'row', gap: 10 }}>
             <View style={{ flex: 1 }}>
               <Input
-                label="Stok"
+                label={t.spareparts.stock}
                 value={stock}
                 onChangeText={(v) => setStock(v.replace(/[^0-9]/g, ''))}
                 keyboardType="numeric"
@@ -170,7 +172,7 @@ export default function SparepartForm() {
             </View>
             <View style={{ flex: 1 }}>
               <Input
-                label="Min. Stok"
+                label={t.spareparts.minStock}
                 value={minStock}
                 onChangeText={(v) => setMinStock(v.replace(/[^0-9]/g, ''))}
                 keyboardType="numeric"
@@ -179,14 +181,14 @@ export default function SparepartForm() {
             </View>
           </View>
           <Input
-            label="Harga Beli (Rp)"
+            label={t.spareparts.buyPrice}
             value={buyPrice}
             onChangeText={(v) => setBuyPrice(v.replace(/[^0-9]/g, ''))}
             keyboardType="numeric"
             placeholder="0"
           />
           <Input
-            label="Harga Jual (Rp) *"
+            label={`${t.spareparts.sellPrice} *`}
             value={sellPrice}
             onChangeText={(v) => setSellPrice(v.replace(/[^0-9]/g, ''))}
             keyboardType="numeric"
@@ -196,7 +198,7 @@ export default function SparepartForm() {
 
           <View style={{ marginTop: 12, gap: 10 }}>
             <Button
-              title={isEdit ? 'Simpan Perubahan' : 'Tambah Sparepart'}
+              title={isEdit ? t.common.saveChanges : t.spareparts.addSparepart}
               onPress={save}
               loading={loading}
               size="lg"
@@ -204,7 +206,7 @@ export default function SparepartForm() {
             />
             {isEdit && (
               <Button
-                title="Hapus Sparepart"
+                title={t.spareparts.deleteSparepart}
                 variant="danger"
                 onPress={() => setConfirmDelete(true)}
                 fullWidth
@@ -216,9 +218,9 @@ export default function SparepartForm() {
 
       <ConfirmDialog
         visible={confirmDelete}
-        title="Hapus Sparepart?"
-        message="Data ini akan dihapus permanen."
-        confirmText="Hapus"
+        title={t.spareparts.deleteTitle}
+        message={t.spareparts.deleteMessage}
+        confirmText={t.common.delete}
         destructive
         onConfirm={handleDelete}
         onCancel={() => setConfirmDelete(false)}

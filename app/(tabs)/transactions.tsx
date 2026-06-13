@@ -15,6 +15,7 @@ import { useTransactionStore } from '../../src/store/useTransactionStore';
 import { TransactionStatus, TransactionType } from '../../src/types';
 import { formatCompactCurrency } from '../../src/utils/currency';
 import { formatDateTime } from '../../src/utils/date';
+import { useTranslation } from '../../src/i18n';
 
 const STATUS_FILTERS: {
   label: string;
@@ -79,6 +80,7 @@ export default function TransactionsScreen() {
   const router = useRouter();
   const showToast = useAppStore((s) => s.showToast);
   const { theme } = useTheme();
+  const t = useTranslation();
   const { transactions, loading, hasMore, filters, setFilters, load, loadMore } = useTransactionStore();
   const [filterModalOpen, setFilterModalOpen] = useState(false);
   const [tempType, setTempType] = useState<TransactionType | undefined>(undefined);
@@ -103,17 +105,17 @@ export default function TransactionsScreen() {
   const handleExport = async () => {
     try {
       await exportService.exportTransactionsToPDF(transactions, 'Laporan Transaksi');
-      showToast('Berhasil export PDF', 'success');
+      showToast(t.transactions.exportSuccess, 'success');
     } catch {
-      showToast('Gagal export PDF', 'error');
+      showToast(t.transactions.exportFailed, 'error');
     }
   };
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
       <ScreenHeader
-        title="Transaksi"
-        subtitle={`${transactions.length} transaksi • ${formatCompactCurrency(totalRevenue)}`}
+        title={t.transactions.title}
+        subtitle={`${transactions.length} ${t.transactions.title.toLowerCase()} • ${formatCompactCurrency(totalRevenue)}`}
         rightElement={
           <Pressable
             onPress={() => router.push('/transaction-form')}
@@ -135,7 +137,7 @@ export default function TransactionsScreen() {
       <SearchBar
         value={filters.search}
         onChangeText={(s) => setFilters({ search: s })}
-        placeholder="Cari pelanggan/plat..."
+        placeholder={t.transactions.searchPlaceholder}
         rightElement={
           <Pressable
             onPress={() => {
@@ -323,8 +325,8 @@ export default function TransactionsScreen() {
           ListEmptyComponent={
             <EmptyState
               icon="receipt-outline"
-              title="Belum ada transaksi"
-              description="Mulai catat servis pertama Anda."
+              title={t.transactions.empty}
+              description={t.transactions.emptyDesc}
             />
           }
           renderItem={({ item }) => {
@@ -392,7 +394,7 @@ export default function TransactionsScreen() {
                         }}
                         numberOfLines={1}
                       >
-                        {item.customer_name ?? 'Tanpa Pelanggan'}
+                        {item.customer_name ?? t.dashboard.noCustomer}
                       </Text>
                       <Text
                         style={{ color: theme.colors.accent, fontSize: 16, fontWeight: '800' }}
@@ -480,12 +482,12 @@ export default function TransactionsScreen() {
                 marginBottom: 16,
               }}
             >
-              Filter Transaksi
+              {t.transactions.filterTitle}
             </Text>
 
             {/* Type filter */}
             <Text style={{ color: theme.colors.textSecondary, fontSize: 12, fontWeight: '600', marginBottom: 8 }}>
-              Jenis Transaksi
+              {t.transactions.transactionType}
             </Text>
             <View style={{ flexDirection: 'row', gap: 8, marginBottom: 16 }}>
               {TYPE_FILTERS.map((f) => {
@@ -518,7 +520,7 @@ export default function TransactionsScreen() {
 
             {/* Status filter */}
             <Text style={{ color: theme.colors.textSecondary, fontSize: 12, fontWeight: '600', marginBottom: 8 }}>
-              Status
+              {t.transactions.status}
             </Text>
             <View style={{ flexDirection: 'row', gap: 8, marginBottom: 16 }}>
               {STATUS_FILTERS.map((f) => {
@@ -551,11 +553,11 @@ export default function TransactionsScreen() {
 
             {/* Date range */}
             <Text style={{ color: theme.colors.textSecondary, fontSize: 12, fontWeight: '600', marginBottom: 8 }}>
-              Rentang Tanggal
+              {t.transactions.dateRange}
             </Text>
             <View style={{ gap: 10, marginBottom: 16 }}>
               <View>
-                <Text style={{ color: theme.colors.textSecondary, fontSize: 11, marginBottom: 4 }}>Dari</Text>
+                <Text style={{ color: theme.colors.textSecondary, fontSize: 11, marginBottom: 4 }}>{t.transactions.from}</Text>
                 <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
                   {(['d', 'm', 'y'] as const).map((k) => (
                     <TextInput
@@ -586,7 +588,7 @@ export default function TransactionsScreen() {
                 </View>
               </View>
               <View>
-                <Text style={{ color: theme.colors.textSecondary, fontSize: 11, marginBottom: 4 }}>Sampai</Text>
+                <Text style={{ color: theme.colors.textSecondary, fontSize: 11, marginBottom: 4 }}>{t.transactions.to}</Text>
                 <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
                   {(['d', 'm', 'y'] as const).map((k) => (
                     <TextInput
@@ -634,7 +636,7 @@ export default function TransactionsScreen() {
                   alignItems: 'center',
                 }}
               >
-                <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>Terapkan</Text>
+                <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>{t.common.apply}</Text>
               </Pressable>
               <Pressable
                 onPress={() => {
@@ -653,7 +655,7 @@ export default function TransactionsScreen() {
                   alignItems: 'center',
                 }}
               >
-                <Text style={{ color: theme.colors.textSecondary, fontWeight: '700', fontSize: 14 }}>Reset</Text>
+                <Text style={{ color: theme.colors.textSecondary, fontWeight: '700', fontSize: 14 }}>{t.common.reset}</Text>
               </Pressable>
             </View>
           </Pressable>

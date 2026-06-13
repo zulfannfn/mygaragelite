@@ -4,6 +4,7 @@ import { Alert, FlatList, Modal, Pressable, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../contexts/ThemeContext';
 import { serviceService } from '../../services/serviceService';
+import { useTranslation } from '../../i18n';
 import { formatCurrency, parseCurrency } from '../../utils/currency';
 import { Button } from './Button';
 import { Input } from './Input';
@@ -19,6 +20,7 @@ const PAGE_SIZE = 20;
 export function AddServiceSheet({ visible, onClose, onAdd }: Props) {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
+  const t = useTranslation();
   const [customName, setCustomName] = useState('');
   const [customPrice, setCustomPrice] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
@@ -92,7 +94,7 @@ export function AddServiceSheet({ visible, onClose, onAdd }: Props) {
 
   const submitCustom = async () => {
     if (!customName.trim() || !customPrice.trim()) {
-      Alert.alert('Peringatan', 'Mohon lengkapi semua data');
+      Alert.alert(t.common.warning, t.common.fillAllData);
       return;
     }
     const price = parseCurrency(customPrice);
@@ -147,7 +149,7 @@ export function AddServiceSheet({ visible, onClose, onAdd }: Props) {
 
           <View style={{ paddingHorizontal: 20, marginBottom: 12 }}>
             <Text style={{ color: theme.colors.text, fontSize: 18, fontWeight: '800' }}>
-              Tambah Jasa Servis
+              {t.services.pickService}
             </Text>
             <Text
               style={{
@@ -156,7 +158,7 @@ export function AddServiceSheet({ visible, onClose, onAdd }: Props) {
                 marginTop: 4,
               }}
             >
-              Pilih jasa atau buat sendiri
+              {t.services.pickServiceDesc}
             </Text>
           </View>
 
@@ -165,7 +167,7 @@ export function AddServiceSheet({ visible, onClose, onAdd }: Props) {
               <Input
                 value={searchQuery}
                 onChangeText={setSearchQuery}
-                placeholder="Cari jasa..."
+                placeholder={t.services.searchService}
                 leftIcon={<Ionicons name="search" size={18} color={theme.colors.textSecondary} />}
                 containerStyle={{ marginBottom: 0 }}
               />
@@ -207,16 +209,16 @@ export function AddServiceSheet({ visible, onClose, onAdd }: Props) {
               <Input
                 value={customName}
                 onChangeText={setCustomName}
-                placeholder="Nama jasa..."
+                placeholder={t.services.namePlaceholder}
               />
               <Input
                 value={customPrice}
                 onChangeText={setCustomPrice}
-                placeholder="Harga (Rp)"
+                placeholder={t.services.price}
                 keyboardType="numeric"
               />
               <Button
-                title="Tambahkan Jasa Kustom"
+                title={t.services.addCustomService}
                 fullWidth
                 onPress={submitCustom}
                 disabled={!customName.trim() || !customPrice.trim()}
@@ -237,7 +239,7 @@ export function AddServiceSheet({ visible, onClose, onAdd }: Props) {
               loading && services.length > 0
                 ? () => (
                     <Text style={{ color: theme.colors.textMuted, textAlign: 'center', padding: 12 }}>
-                      Memuat...
+                      {t.common.loading}
                     </Text>
                   )
                 : undefined
@@ -245,11 +247,11 @@ export function AddServiceSheet({ visible, onClose, onAdd }: Props) {
             ListEmptyComponent={
               loading ? (
                 <Text style={{ color: theme.colors.textMuted, textAlign: 'center', padding: 12 }}>
-                  Memuat...
+                  {t.common.loading}
                 </Text>
               ) : (
                 <Text style={{ color: theme.colors.textMuted, textAlign: 'center', padding: 12 }}>
-                  Tidak ada jasa
+                  {t.services.noService}
                 </Text>
               )
             }

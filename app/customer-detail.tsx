@@ -6,6 +6,7 @@ import { Badge } from '../src/components/ui/Badge';
 import { Card } from '../src/components/ui/Card';
 import { EmptyState } from '../src/components/ui/EmptyState';
 import { ScreenHeader } from '../src/components/ui/ScreenHeader';
+import { useTranslation } from '../src/i18n';
 import { useTheme } from '../src/contexts/ThemeContext';
 import { customerService } from '../src/services/customerService';
 import { transactionService } from '../src/services/transactionService';
@@ -17,6 +18,7 @@ export default function CustomerDetail() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { theme } = useTheme();
+  const t = useTranslation();
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [history, setHistory] = useState<Transaction[]>([]);
 
@@ -48,9 +50,9 @@ export default function CustomerDetail() {
   if (!customer) {
     return (
       <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
-        <ScreenHeader title="Detail Pelanggan" showBack />
+        <ScreenHeader title={t.customers.detailTitle} showBack />
         <Text style={{ color: theme.colors.textMuted, textAlign: 'center', marginTop: 40 }}>
-          Memuat...
+          {t.common.loading}
         </Text>
       </View>
     );
@@ -63,7 +65,7 @@ export default function CustomerDetail() {
   return (
     <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
       <ScreenHeader
-        title="Detail Pelanggan"
+        title={t.customers.detailTitle}
         showBack
         rightElement={
           <Pressable
@@ -146,7 +148,7 @@ export default function CustomerDetail() {
         {/* Stats */}
         <View style={{ flexDirection: 'row', gap: 10, marginBottom: 16 }}>
           <Card style={{ flex: 1 }} padding={12}>
-            <Text style={{ color: theme.colors.textSecondary, fontSize: 11 }}>TOTAL SERVIS</Text>
+            <Text style={{ color: theme.colors.textSecondary, fontSize: 11 }}>{t.customers.totalServices}</Text>
             <Text
               style={{
                 color: theme.colors.accent,
@@ -159,7 +161,7 @@ export default function CustomerDetail() {
             </Text>
           </Card>
           <Card style={{ flex: 1 }} padding={12}>
-            <Text style={{ color: theme.colors.textSecondary, fontSize: 11 }}>TOTAL BELANJA</Text>
+            <Text style={{ color: theme.colors.textSecondary, fontSize: 11 }}>{t.customers.totalSpent}</Text>
             <Text
               style={{
                 color: theme.colors.success,
@@ -181,14 +183,14 @@ export default function CustomerDetail() {
             marginBottom: 8,
           }}
         >
-          Riwayat Servis
+          {t.customers.serviceHistory}
         </Text>
 
         {history.length === 0 ? (
           <EmptyState
             icon="receipt-outline"
-            title="Belum ada servis"
-            description="Riwayat servis akan muncul di sini."
+            title={t.customers.noServices}
+            description={t.customers.noServicesDesc}
           />
         ) : (
           history.map((tx) => (
@@ -205,10 +207,10 @@ export default function CustomerDetail() {
                   <Badge
                     label={
                       tx.status === 'paid'
-                        ? 'Lunas'
+                        ? t.common.paid
                         : tx.status === 'pending'
-                          ? 'Pending'
-                          : 'Batal'
+                          ? t.common.pending
+                          : t.common.cancelled
                     }
                     variant={
                       tx.status === 'paid'
