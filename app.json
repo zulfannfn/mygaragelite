@@ -2,7 +2,7 @@
   "expo": {
     "name": "MyGarageLite",
     "slug": "MyGarageLite",
-    "version": "2.0.1",
+    "version": "2.0.2",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "mygaragelite",
@@ -12,7 +12,7 @@
       "supportsTablet": true
     },
     "android": {
-      "versionCode": 3,
+      "versionCode": 4,
       "package": "com.zulfan.mygaragelite",
       "permissions": [
         "android.permission.BLUETOOTH",
