@@ -43,6 +43,17 @@ interface AppState {
   lastAddedCustomerId: string | null;
   setLastAddedCustomerId: (id: string | null) => void;
 
+  // Transaction Form Context — remember last selected mechanic & cashier
+  lastMechanicId: string | null;
+  setLastMechanicId: (id: string | null) => Promise<void>;
+  lastCashierId: string | null;
+  setLastCashierId: (id: string | null) => Promise<void>;
+
+  // Offline transaction counter
+  offlineTxCount: number;
+  incrementOfflineTxCount: () => Promise<void>;
+  resetOfflineTxCount: () => Promise<void>;
+
   // Init
   loadSettings: () => Promise<void>;
 }
@@ -105,6 +116,28 @@ export const useAppStore = create<AppState>((set, get) => ({
   lastAddedCustomerId: null,
   setLastAddedCustomerId: (id) => set({ lastAddedCustomerId: id }),
 
+  lastMechanicId: null,
+  setLastMechanicId: async (id) => {
+    set({ lastMechanicId: id });
+    await settingsService.set('last_mechanic_id', id ?? '');
+  },
+  lastCashierId: null,
+  setLastCashierId: async (id) => {
+    set({ lastCashierId: id });
+    await settingsService.set('last_cashier_id', id ?? '');
+  },
+
+  offlineTxCount: 0,
+  incrementOfflineTxCount: async () => {
+    const next = get().offlineTxCount + 1;
+    set({ offlineTxCount: next });
+    await settingsService.set('offline_tx_count', String(next));
+  },
+  resetOfflineTxCount: async () => {
+    set({ offlineTxCount: 0 });
+    await settingsService.set('offline_tx_count', '0');
+  },
+
   isDarkMode: true,
   setDarkMode: async (v) => {
     set({ isDarkMode: v });
@@ -140,6 +173,9 @@ export const useAppStore = create<AppState>((set, get) => ({
       onboardingDone: all.onboarding_done === 'true',
       isDarkMode: all.dark_mode !== 'false',
       language: (all.language === 'en' ? 'en' : 'id') as Language,
+      lastMechanicId: all.last_mechanic_id || null,
+      lastCashierId: all.last_cashier_id || null,
+      offlineTxCount: parseInt(all.offline_tx_count ?? '0', 10),
     });
   },
 }));

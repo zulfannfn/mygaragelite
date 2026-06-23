@@ -16,6 +16,7 @@ interface BackupData {
   reminders: Record<string, unknown>[];
   settings: Record<string, unknown>[];
   employees?: Record<string, unknown>[];
+  stock_history?: Record<string, unknown>[];
 }
 
 async function insertRows(
@@ -41,7 +42,7 @@ export const backupService = {
   async exportBackup(): Promise<void> {
     const db = await getDatabase();
     const backup: BackupData = {
-      version: 3,
+      version: 4,
       timestamp: Date.now(),
       customers: await db.getAllAsync('SELECT * FROM customers'),
       spareparts: await db.getAllAsync('SELECT * FROM spareparts'),
@@ -52,6 +53,7 @@ export const backupService = {
       reminders: await db.getAllAsync('SELECT * FROM reminders'),
       settings: await db.getAllAsync('SELECT * FROM settings'),
       employees: await db.getAllAsync('SELECT * FROM employees'),
+      stock_history: await db.getAllAsync('SELECT * FROM stock_history'),
     };
 
     const filename = `mygarage_backup_${Date.now()}.json`;
@@ -86,15 +88,18 @@ export const backupService = {
       await clearDatabase();
       const db = await getDatabase();
 
+      // Urutan insert mengikuti FK dependency
       await insertRows(db, 'customers', backup.customers);
-      await insertRows(db, 'spareparts', backup.spareparts);
       await insertRows(db, 'employees', backup.employees ?? []);
       await insertRows(db, 'services', backup.services ?? []);
+      await insertRows(db, 'spareparts', backup.spareparts);
       await insertRows(db, 'transactions', backup.transactions);
       await insertRows(db, 'service_items', backup.service_items ?? []);
       await insertRows(db, 'transaction_spareparts', backup.transaction_spareparts ?? []);
       await insertRows(db, 'reminders', backup.reminders ?? []);
       await insertRows(db, 'settings', backup.settings ?? []);
+      // stock_history harus setelah spareparts (FK: sparepart_id → spareparts.id)
+      await insertRows(db, 'stock_history', backup.stock_history ?? []);
 
       return { ok: true, message: 'Restore berhasil' };
     } catch (e: unknown) {

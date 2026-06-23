@@ -1,11 +1,12 @@
+import { Ionicons } from '@expo/vector-icons';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
-import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Text, View } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { AppState, ActivityIndicator, Text, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import 'react-native-reanimated';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Toast } from '../src/components/ui/Toast';
 import { darkTheme, lightTheme } from '../src/constants/theme';
@@ -13,6 +14,56 @@ import { ThemeProvider } from '../src/contexts/ThemeContext';
 import { initDatabase } from '../src/database/db';
 import { initializeAds } from '../src/services/adsInit';
 import { useAppStore } from '../src/store/useAppStore';
+import { checkOnline } from '../src/utils/network';
+
+function OfflineBanner() {
+  const [online, setOnline] = useState(true);
+  const insets = useSafeAreaInsets();
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const prevOnlineRef = useRef<boolean | null>(null);
+  const resetOfflineTxCount = useAppStore((s) => s.resetOfflineTxCount);
+
+  useEffect(() => {
+    const check = async () => {
+      const result = await checkOnline();
+      setOnline(result);
+      if (result && prevOnlineRef.current === false) {
+        resetOfflineTxCount();
+      }
+      prevOnlineRef.current = result;
+    };
+    check();
+    timerRef.current = setInterval(check, 12000);
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') check();
+    });
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+      sub.remove();
+    };
+  }, [resetOfflineTxCount]);
+
+  if (online) return null;
+
+  return (
+    <View
+      style={{
+        backgroundColor: '#B45309',
+        paddingTop: insets.top + 7,
+        paddingBottom: 7,
+        paddingHorizontal: 16,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+      }}
+    >
+      <Ionicons name="cloud-offline-outline" size={15} color="#FEF3C7" />
+      <Text style={{ color: '#FEF3C7', fontSize: 12, fontWeight: '600', flex: 1 }}>
+        Offline · Butuh internet untuk kelancaran transaksi
+      </Text>
+    </View>
+  );
+}
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
@@ -86,6 +137,7 @@ export default function RootLayout() {
     <ThemeProvider isDarkMode={isDarkMode}>
       <GestureHandlerRootView style={{ flex: 1 }}>
         <SafeAreaProvider>
+          <OfflineBanner />
           <Stack
             screenOptions={{
               headerShown: false,
@@ -104,13 +156,24 @@ export default function RootLayout() {
               options={{ presentation: 'modal', animation: 'slide_from_bottom' }}
             />
             <Stack.Screen
-              name="transaction-form"
+              name="sparepart-import"
               options={{ presentation: 'modal', animation: 'slide_from_bottom' }}
+            />
+            <Stack.Screen
+              name="transaction-form"
+              options={{ presentation: 'fullScreenModal', animation: 'slide_from_bottom' }}
             />
             <Stack.Screen name="transaction-detail" />
             <Stack.Screen name="customer-detail" />
             <Stack.Screen name="settings" />
             <Stack.Screen name="reminders" />
+            <Stack.Screen name="service-reminders" />
+            <Stack.Screen name="purchase-orders" />
+            <Stack.Screen name="purchase-order-detail" />
+            <Stack.Screen
+              name="purchase-order-form"
+              options={{ presentation: 'modal', animation: 'slide_from_bottom' }}
+            />
           </Stack>
           <Toast />
           <StatusBar style={isDarkMode ? 'light' : 'dark'} />

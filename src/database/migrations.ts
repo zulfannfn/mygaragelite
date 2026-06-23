@@ -105,6 +105,68 @@ CREATE TABLE IF NOT EXISTS services (
   updated_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_services_name ON services(name);
+
+CREATE TABLE IF NOT EXISTS stock_history (
+  id TEXT PRIMARY KEY,
+  sparepart_id TEXT NOT NULL,
+  sparepart_name TEXT NOT NULL,
+  delta INTEGER NOT NULL,
+  stock_after INTEGER NOT NULL,
+  reason TEXT DEFAULT '',
+  source TEXT DEFAULT 'manual',
+  created_at INTEGER NOT NULL,
+  FOREIGN KEY (sparepart_id) REFERENCES spareparts(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_stock_history_sparepart ON stock_history(sparepart_id);
+CREATE INDEX IF NOT EXISTS idx_stock_history_created ON stock_history(created_at);
+
+CREATE TABLE IF NOT EXISTS operational_costs (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  category TEXT DEFAULT 'Lainnya',
+  amount REAL DEFAULT 0,
+  cost_date INTEGER NOT NULL,
+  notes TEXT DEFAULT '',
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_operational_costs_date ON operational_costs(cost_date);
+
+CREATE TABLE IF NOT EXISTS service_reminder_sends (
+  id TEXT PRIMARY KEY,
+  customer_id TEXT NOT NULL,
+  transaction_id TEXT NOT NULL,
+  sent_at INTEGER NOT NULL,
+  FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE,
+  FOREIGN KEY (transaction_id) REFERENCES transactions(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_reminder_sends_tx ON service_reminder_sends(transaction_id);
+CREATE INDEX IF NOT EXISTS idx_reminder_sends_customer ON service_reminder_sends(customer_id);
+
+CREATE TABLE IF NOT EXISTS purchase_orders (
+  id TEXT PRIMARY KEY,
+  po_number TEXT DEFAULT '',
+  supplier TEXT DEFAULT '',
+  notes TEXT DEFAULT '',
+  status TEXT DEFAULT 'pre_order',
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS purchase_order_items (
+  id TEXT PRIMARY KEY,
+  po_id TEXT NOT NULL,
+  sparepart_id TEXT NOT NULL,
+  sparepart_name TEXT NOT NULL,
+  qty_ordered INTEGER NOT NULL DEFAULT 0,
+  qty_received INTEGER NOT NULL DEFAULT 0,
+  qty_stocked INTEGER NOT NULL DEFAULT 0,
+  buy_price REAL DEFAULT 0,
+  FOREIGN KEY (po_id) REFERENCES purchase_orders(id) ON DELETE CASCADE,
+  FOREIGN KEY (sparepart_id) REFERENCES spareparts(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_po_items_po ON purchase_order_items(po_id);
+CREATE INDEX IF NOT EXISTS idx_po_items_sparepart ON purchase_order_items(sparepart_id);
+CREATE INDEX IF NOT EXISTS idx_po_status ON purchase_orders(status);
 `;
 
 async function addColumnIfMissing(
@@ -130,4 +192,16 @@ export async function runMigrations(db: SQLite.SQLiteDatabase): Promise<void> {
   await addColumnIfMissing(db, 'transactions', 'change_amount', 'REAL DEFAULT 0');
   await addColumnIfMissing(db, 'transactions', 'cashier_id', 'TEXT');
   await addColumnIfMissing(db, 'transactions', 'cashier_name', "TEXT DEFAULT ''");
+  await addColumnIfMissing(db, 'transactions', 'kilometer', 'INTEGER');
+  await addColumnIfMissing(db, 'transactions', 'custom_discount', 'REAL DEFAULT 0');
+  await addColumnIfMissing(db, 'spareparts', 'supplier', "TEXT DEFAULT ''");
+  await addColumnIfMissing(db, 'spareparts', 'barcode', "TEXT DEFAULT ''");
+  await addColumnIfMissing(db, 'transaction_spareparts', 'discount_per_item', 'REAL DEFAULT 0');
+  await addColumnIfMissing(db, 'spareparts', 'brand', "TEXT DEFAULT ''");
+  await addColumnIfMissing(db, 'spareparts', 'rack_name', "TEXT DEFAULT ''");
+  await addColumnIfMissing(db, 'spareparts', 'rack_row', "TEXT DEFAULT ''");
+  await addColumnIfMissing(db, 'stock_history', 'buy_price_after', 'REAL');
+  await addColumnIfMissing(db, 'stock_history', 'sell_price_after', 'REAL');
+  await addColumnIfMissing(db, 'transactions', 'next_service_date', 'INTEGER');
+  await addColumnIfMissing(db, 'customers', 'customer_type', "TEXT DEFAULT 'orang'");
 }

@@ -4,6 +4,8 @@ import {
     transactionService,
 } from '../services/transactionService';
 import { PaymentMethod, Transaction, TransactionStatus, TransactionType } from '../types';
+import { checkOnline } from '../utils/network';
+import { useAppStore } from './useAppStore';
 
 interface TransactionFilters {
   search: string;
@@ -57,6 +59,10 @@ export const useTransactionStore = create<TransactionState>((set, get) => ({
   },
   add: async (input) => {
     const tx = await transactionService.create(input);
+    const online = await checkOnline();
+    if (!online) {
+      await useAppStore.getState().incrementOfflineTxCount();
+    }
     await get().load();
     return tx;
   },

@@ -9,6 +9,7 @@ export const APP_CONFIG = {
 };
 
 export const VEHICLE_TYPES = ['Motor', 'Mobil'] as const;
+export const CUSTOMER_TYPES = ['orang', 'bengkel'] as const;
 export const PAYMENT_METHODS = ['Tunai', 'Transfer', 'QRIS', 'Debit'] as const;
 export const TRANSACTION_STATUS = ['pending', 'paid', 'cancelled'] as const;
 export const REMINDER_TYPES = ['oil_change', 'periodic_service', 'tune_up'] as const;

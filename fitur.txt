@@ -1,0 +1,63 @@
+    FITUR MYGARAGE LITE
+    ===================
+
+    1. DASHBOARD
+    - Ringkasan pendapatan harian, jumlah servis, sparepart terjual
+    - Notifikasi stok menipis & stok habis
+    - Status antrian transaksi: Antrian, Dikerjakan, Menunggu Bayar
+    - Quick action: transaksi baru, tambah pelanggan, servis, sparepart, PO, reminder servis
+
+    2. PELANGGAN
+    - CRUD pelanggan (nama, no. HP, plat nomor, kendaraan)
+    - Riwayat servis per pelanggan
+    - Telepon & WhatsApp langsung dari detail pelanggan
+
+    3. TRANSAKSI / SERVIS
+    - Transaksi servis (jasa + sparepart) dan retail (jual sparepart)
+    - Pilih mekanik/karyawan per transaksi
+    - Hitung total otomatis, status pembayaran (lunas/menunggu bayar)
+    - List transaksi dengan filter status, filter tanggal, dan pencarian
+    - Detail transaksi lengkap + cetak/kirim struk
+    - Kirim struk & template pesan (selesai dibuat, siap diambil, lunas) via WhatsApp
+    - Cetak struk via printer Bluetooth (scan, connect, print)
+
+    4. SPAREPART / STOK
+    - CRUD sparepart (kategori, harga beli/jual, stok)
+    - Alert stok menipis & stok habis
+    - Stok otomatis berkurang/bertambah saat transaksi
+    - Riwayat pergerakan stok (stock history) per sparepart
+    - Import sparepart massal dari file CSV (validasi baris, preview, laporan hasil import)
+
+    5. PURCHASE ORDER (PO)
+    - Buat & kelola PO ke supplier
+    - Status PO: Pre Order, Belum Input, Selesai
+    - Filter PO by status
+    - Export/cetak PO ke PDF
+
+    6. SERVIS BERKALA / REMINDER
+    - Reminder servis berkala otomatis berdasarkan riwayat transaksi pelanggan
+    - Filter due list per periode (bulan ini, dll)
+    - Kirim pesan pengingat servis via WhatsApp
+    - Reminder manual (ganti oli, servis berkala) per pelanggan
+
+    7. KARYAWAN / MEKANIK
+    - CRUD data karyawan/mekanik
+    - Status aktif/nonaktif
+    - Dasar untuk kalkulasi bagi hasil mekanik
+
+    8. LAPORAN
+    - Laporan harian & bulanan, custom periode
+    - Grafik pendapatan & sparepart terlaris
+    - Laporan keuangan: pemasukan, biaya operasional, bagi hasil mekanik (per servis/margin %)
+    - Kelola biaya operasional (listrik, air, sewa, gaji, BBM, internet, lainnya)
+    - Statistik kasir/kinerja
+    - Export laporan ke PDF & CSV
+
+    9. PENGATURAN
+    - Profil bengkel (nama, alamat, no. HP)
+    - Pilihan bahasa: Indonesia / English (full bilingual)
+    - Pengaturan ukuran kertas struk & printer Bluetooth
+    - Mode gelap/terang
+    - Backup & restore database (file JSON)
+    - Reset data dummy & hapus semua data
+    - Manajemen karyawan, PO, dan reminder servis dari menu Pengaturan

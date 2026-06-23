@@ -111,7 +111,13 @@ export default function CustomerDetail() {
               {customer.plate_number ? (
                 <Badge label={customer.plate_number} variant="accent" />
               ) : null}
-              <Badge label={customer.vehicle_type} variant="info" />
+              {customer.customer_type !== 'bengkel' && (
+                <Badge label={customer.vehicle_type} variant="info" />
+              )}
+              <Badge
+                label={customer.customer_type === 'bengkel' ? t.customers.typeBengkel : t.customers.typeOrang}
+                variant="neutral"
+              />
             </View>
           </View>
 
@@ -222,11 +228,17 @@ export default function CustomerDetail() {
                     style={{ marginTop: 6 }}
                   />
                 </View>
-                <Text
-                  style={{ color: theme.colors.accent, fontSize: 14, fontWeight: '800' }}
-                >
-                  {formatCompactCurrency(tx.total_amount)}
-                </Text>
+                <View style={{ alignItems: 'flex-end' }}>
+                  <Badge
+                    label={tx.type === 'retail' ? t.transactions.cashier : t.dashboard.service}
+                    variant={tx.type === 'retail' ? 'info' : 'accent'}
+                  />
+                  <Text
+                    style={{ color: theme.colors.accent, fontSize: 14, fontWeight: '800', marginTop: 6 }}
+                  >
+                    {formatCompactCurrency(tx.total_amount)}
+                  </Text>
+                </View>
               </View>
             </Card>
           ))

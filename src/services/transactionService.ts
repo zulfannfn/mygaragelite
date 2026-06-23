@@ -24,11 +24,13 @@ export interface TransactionInput {
   paid_amount?: number;
   change_amount?: number;
   service_items: { service_name: string; price: number }[];
+  custom_discount?: number;
   spareparts: {
     sparepart_id: string | null;
     sparepart_name: string;
     quantity: number;
     sell_price: number;
+    discount_per_item?: number;
   }[];
 }
 
@@ -43,6 +45,7 @@ export const transactionService = {
     const db = await getDatabase();
     let sql = `
       SELECT t.*, c.name as customer_name, c.plate_number as customer_plate, c.phone as customer_phone,
+             c.vehicle_brand as customer_vehicle_brand,
              e.name as mechanic_name
       FROM transactions t
       LEFT JOIN customers c ON c.id = t.customer_id
@@ -53,8 +56,8 @@ export const transactionService = {
 
     if (filters?.search?.trim()) {
       const q = `%${filters.search.trim()}%`;
-      sql += ' AND (c.name LIKE ? OR c.plate_number LIKE ?)';
-      params.push(q, q);
+      sql += ' AND (c.name LIKE ? OR c.plate_number LIKE ? OR c.vehicle_brand LIKE ?)';
+      params.push(q, q, q);
     }
     if (filters?.status) {
       sql += ' AND t.status = ?';
@@ -108,7 +111,11 @@ export const transactionService = {
       ...ids
     );
     const allSpareparts = await db.getAllAsync<TransactionSparepart>(
-      `SELECT * FROM transaction_spareparts WHERE transaction_id IN (${placeholders}) ORDER BY sparepart_name`,
+      `SELECT tsp.*, COALESCE(s.buy_price, 0) as buy_price
+       FROM transaction_spareparts tsp
+       LEFT JOIN spareparts s ON s.id = tsp.sparepart_id
+       WHERE tsp.transaction_id IN (${placeholders})
+       ORDER BY tsp.sparepart_name`,
       ...ids
     );
 
@@ -137,6 +144,7 @@ export const transactionService = {
     const db = await getDatabase();
     const tx = await db.getFirstAsync<Transaction>(
       `SELECT t.*, c.name as customer_name, c.plate_number as customer_plate, c.phone as customer_phone,
+              c.vehicle_type as customer_vehicle_type, c.vehicle_brand as customer_vehicle_brand,
               e.name as mechanic_name
        FROM transactions t
        LEFT JOIN customers c ON c.id = t.customer_id
@@ -150,7 +158,10 @@ export const transactionService = {
       id
     );
     tx.spareparts = await db.getAllAsync<TransactionSparepart>(
-      'SELECT * FROM transaction_spareparts WHERE transaction_id = ?',
+      `SELECT tsp.*, COALESCE(s.buy_price, 0) as buy_price
+       FROM transaction_spareparts tsp
+       LEFT JOIN spareparts s ON s.id = tsp.sparepart_id
+       WHERE tsp.transaction_id = ?`,
       id
     );
     return tx;
@@ -177,15 +188,16 @@ export const transactionService = {
 
     const totalService = input.service_items.reduce((s, x) => s + x.price, 0);
     const totalSparepart = input.spareparts.reduce(
-      (s, x) => s + x.sell_price * x.quantity,
+      (s, x) => s + (x.sell_price - (x.discount_per_item ?? 0)) * x.quantity,
       0
     );
-    const total = totalService + totalSparepart;
+    const customDiscount = input.custom_discount ?? 0;
+    const total = totalService + totalSparepart - customDiscount;
 
     await db.withTransactionAsync(async () => {
       await db.runAsync(
-        `INSERT INTO transactions (id, customer_id, mechanic_id, cashier_id, cashier_name, mechanic_notes, complaint, recommendation, type, status, payment_method, paid_amount, change_amount, total_service, total_sparepart, total_amount, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO transactions (id, customer_id, mechanic_id, cashier_id, cashier_name, mechanic_notes, complaint, recommendation, type, status, payment_method, paid_amount, change_amount, total_service, total_sparepart, total_amount, custom_discount, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         id,
         input.customer_id,
         input.mechanic_id ?? null,
@@ -202,6 +214,7 @@ export const transactionService = {
         totalService,
         totalSparepart,
         total,
+        customDiscount,
         now,
         now
       );
@@ -217,14 +230,15 @@ export const transactionService = {
       }
       for (const sp of input.spareparts) {
         await db.runAsync(
-          `INSERT INTO transaction_spareparts (id, transaction_id, sparepart_id, sparepart_name, quantity, sell_price)
-           VALUES (?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO transaction_spareparts (id, transaction_id, sparepart_id, sparepart_name, quantity, sell_price, discount_per_item)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
           generateId(),
           id,
           sp.sparepart_id,
           sp.sparepart_name,
           sp.quantity,
-          sp.sell_price
+          sp.sell_price,
+          sp.discount_per_item ?? 0
         );
         // Decrement stock
         if (sp.sparepart_id) {
@@ -263,7 +277,17 @@ export const transactionService = {
 
   async updateMeta(
     id: string,
-    data: { complaint?: string; recommendation?: string; mechanic_notes?: string; mechanic_id?: string | null }
+    data: {
+      complaint?: string;
+      recommendation?: string;
+      mechanic_notes?: string;
+      mechanic_id?: string | null;
+      cashier_id?: string | null;
+      cashier_name?: string | null;
+      kilometer?: number | null;
+      custom_discount?: number | null;
+      next_service_date?: number | null;
+    }
   ): Promise<void> {
     const db = await getDatabase();
     const fields: string[] = [];
@@ -272,6 +296,11 @@ export const transactionService = {
     if (data.recommendation !== undefined) { fields.push('recommendation = ?'); params.push(data.recommendation); }
     if (data.mechanic_notes !== undefined) { fields.push('mechanic_notes = ?'); params.push(data.mechanic_notes); }
     if (data.mechanic_id !== undefined) { fields.push('mechanic_id = ?'); params.push(data.mechanic_id); }
+    if (data.cashier_id !== undefined) { fields.push('cashier_id = ?'); params.push(data.cashier_id); }
+    if (data.cashier_name !== undefined) { fields.push('cashier_name = ?'); params.push(data.cashier_name); }
+    if (data.kilometer !== undefined) { fields.push('kilometer = ?'); params.push(data.kilometer); }
+    if (data.custom_discount !== undefined) { fields.push('custom_discount = ?'); params.push(data.custom_discount); }
+    if (data.next_service_date !== undefined) { fields.push('next_service_date = ?'); params.push(data.next_service_date); }
     if (fields.length === 0) return;
     fields.push('updated_at = ?'); params.push(Date.now());
     params.push(id);
@@ -279,6 +308,7 @@ export const transactionService = {
       `UPDATE transactions SET ${fields.join(', ')} WHERE id = ?`,
       ...params
     );
+    if (data.custom_discount !== undefined) await this.recalcTotals(id);
   },
 
   /**
@@ -291,16 +321,21 @@ export const transactionService = {
       id
     );
     const spRow = await db.getFirstAsync<{ total: number }>(
-      'SELECT COALESCE(SUM(sell_price * quantity), 0) as total FROM transaction_spareparts WHERE transaction_id = ?',
+      'SELECT COALESCE(SUM((sell_price - COALESCE(discount_per_item, 0)) * quantity), 0) as total FROM transaction_spareparts WHERE transaction_id = ?',
+      id
+    );
+    const cdRow = await db.getFirstAsync<{ custom_discount: number | null }>(
+      'SELECT custom_discount FROM transactions WHERE id = ?',
       id
     );
     const totalService = svcRow?.total ?? 0;
     const totalSparepart = spRow?.total ?? 0;
+    const customDiscount = cdRow?.custom_discount ?? 0;
     await db.runAsync(
       'UPDATE transactions SET total_service = ?, total_sparepart = ?, total_amount = ?, updated_at = ? WHERE id = ?',
       totalService,
       totalSparepart,
-      totalService + totalSparepart,
+      totalService + totalSparepart - customDiscount,
       Date.now(),
       id
     );
@@ -335,19 +370,21 @@ export const transactionService = {
       sparepart_name: string;
       quantity: number;
       sell_price: number;
+      discount_per_item?: number;
     }
   ): Promise<void> {
     const db = await getDatabase();
     await db.withTransactionAsync(async () => {
       await db.runAsync(
-        `INSERT INTO transaction_spareparts (id, transaction_id, sparepart_id, sparepart_name, quantity, sell_price)
-         VALUES (?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO transaction_spareparts (id, transaction_id, sparepart_id, sparepart_name, quantity, sell_price, discount_per_item)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
         generateId(),
         transactionId,
         line.sparepart_id,
         line.sparepart_name,
         line.quantity,
-        line.sell_price
+        line.sell_price,
+        line.discount_per_item ?? 0
       );
       if (line.sparepart_id) {
         await db.runAsync(

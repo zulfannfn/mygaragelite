@@ -7,6 +7,8 @@ import { formatDateTime } from '../utils/date';
 
 const STATUS_LABELS: Record<TransactionStatus, string> = {
   pending: 'Menunggu',
+  in_progress: 'Sedang Dikerjakan',
+  waiting_payment: 'Menunggu Bayar',
   paid: 'Lunas',
   cancelled: 'Batal',
 };
@@ -108,11 +110,15 @@ export const exportService = {
       'Jenis Item',
       'Nama Item',
       'Qty',
-      'Harga Satuan',
+      'Harga Jual',
+      'Harga Beli',
+      'Margin Item',
       'Subtotal Item',
       'Total Jasa (Transaksi)',
       'Total Sparepart (Transaksi)',
       'Total Transaksi',
+      'Total Margin Sparepart',
+      'Pendapatan Kotor',
     ]);
 
     const rows: string[] = [];
@@ -120,11 +126,15 @@ export const exportService = {
 
     const pushLineRow = (
       t: Transaction,
+      txMarginSp: number,
+      txGrossProfit: number,
       itemType: string,
       itemName: string,
       qty: number,
       unitPrice: number,
-      lineSubtotal: number
+      buyPrice: number | '',
+      lineSubtotal: number,
+      itemMargin: number | ''
     ) => {
       rows.push(
         csvRow([
@@ -143,10 +153,14 @@ export const exportService = {
           itemName,
           qty,
           unitPrice,
+          buyPrice,
+          itemMargin,
           lineSubtotal,
           t.total_service,
           t.total_sparepart,
           t.total_amount,
+          txMarginSp,
+          txGrossProfit,
         ])
       );
     };
@@ -155,25 +169,27 @@ export const exportService = {
       const services = t.service_items ?? [];
       const spareparts = t.spareparts ?? [];
 
+      const txMarginSp = spareparts.reduce((sum, sp) => {
+        const buy = sp.buy_price ?? 0;
+        return sum + ((sp.sell_price ?? 0) - buy) * (sp.quantity ?? 1);
+      }, 0);
+      const txGrossProfit = t.total_service + txMarginSp;
+
       for (const item of services) {
-        pushLineRow(t, 'Jasa', item.service_name, 1, item.price, item.price);
+        pushLineRow(t, txMarginSp, txGrossProfit, 'Jasa', item.service_name, 1, item.price, '', item.price, '');
       }
 
       for (const item of spareparts) {
         const qty = item.quantity ?? 1;
-        const unitPrice = item.sell_price ?? 0;
-        pushLineRow(
-          t,
-          'Sparepart',
-          item.sparepart_name ?? '-',
-          qty,
-          unitPrice,
-          qty * unitPrice
-        );
+        const sellP = item.sell_price ?? 0;
+        const buyP = item.buy_price ?? 0;
+        const lineSubtotal = qty * sellP;
+        const itemMargin = (sellP - buyP) * qty;
+        pushLineRow(t, txMarginSp, txGrossProfit, 'Sparepart', item.sparepart_name ?? '-', qty, sellP, buyP, lineSubtotal, itemMargin);
       }
 
       if (services.length === 0 && spareparts.length === 0) {
-        pushLineRow(t, '-', '(tidak ada item)', 0, 0, 0);
+        pushLineRow(t, 0, t.total_service, '-', '(tidak ada item)', 0, 0, '', 0, '');
       }
     }
 

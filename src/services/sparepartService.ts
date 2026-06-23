@@ -9,6 +9,11 @@ export interface SparepartInput {
   min_stock?: number;
   buy_price?: number;
   sell_price?: number;
+  supplier?: string;
+  barcode?: string;
+  brand?: string;
+  rack_name?: string;
+  rack_row?: string;
 }
 
 export const sparepartService = {
@@ -16,11 +21,11 @@ export const sparepartService = {
     const db = await getDatabase();
     let sql = 'SELECT * FROM spareparts';
     const params: any[] = [];
-    
+
     if (search && search.trim()) {
       const q = `%${search.trim()}%`;
-      sql += ' WHERE name LIKE ? OR category LIKE ?';
-      params.push(q, q);
+      sql += ' WHERE name LIKE ? OR category LIKE ? OR brand LIKE ?';
+      params.push(q, q, q);
     }
     
     sql += ' ORDER BY name ASC';
@@ -42,6 +47,16 @@ export const sparepartService = {
     const db = await getDatabase();
     return (
       (await db.getFirstAsync<Sparepart>('SELECT * FROM spareparts WHERE id = ?', id)) ?? null
+    );
+  },
+
+  async getByName(name: string): Promise<Sparepart | null> {
+    const db = await getDatabase();
+    return (
+      (await db.getFirstAsync<Sparepart>(
+        'SELECT * FROM spareparts WHERE LOWER(name) = LOWER(?) LIMIT 1',
+        name.trim()
+      )) ?? null
     );
   },
 
@@ -72,13 +87,19 @@ export const sparepartService = {
       min_stock: input.min_stock ?? 5,
       buy_price: input.buy_price ?? 0,
       sell_price: input.sell_price ?? 0,
+      supplier: input.supplier ?? '',
+      barcode: input.barcode ?? '',
+      brand: input.brand ?? '',
+      rack_name: input.rack_name ?? '',
+      rack_row: input.rack_row ?? '',
       created_at: now,
       updated_at: now,
     };
     await db.runAsync(
-      `INSERT INTO spareparts (id, name, category, stock, min_stock, buy_price, sell_price, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO spareparts (id, name, category, stock, min_stock, buy_price, sell_price, supplier, barcode, brand, rack_name, rack_row, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       sp.id, sp.name, sp.category, sp.stock, sp.min_stock, sp.buy_price, sp.sell_price,
+      sp.supplier ?? '', sp.barcode ?? '', sp.brand ?? '', sp.rack_name ?? '', sp.rack_row ?? '',
       sp.created_at, sp.updated_at
     );
     return sp;
@@ -88,7 +109,7 @@ export const sparepartService = {
     const db = await getDatabase();
     const now = Date.now();
     await db.runAsync(
-      `UPDATE spareparts SET name = ?, category = ?, stock = ?, min_stock = ?, buy_price = ?, sell_price = ?, updated_at = ?
+      `UPDATE spareparts SET name = ?, category = ?, stock = ?, min_stock = ?, buy_price = ?, sell_price = ?, supplier = ?, barcode = ?, brand = ?, rack_name = ?, rack_row = ?, updated_at = ?
        WHERE id = ?`,
       input.name,
       input.category ?? 'Lainnya',
@@ -96,7 +117,23 @@ export const sparepartService = {
       input.min_stock ?? 5,
       input.buy_price ?? 0,
       input.sell_price ?? 0,
+      input.supplier ?? '',
+      input.barcode ?? '',
+      input.brand ?? '',
+      input.rack_name ?? '',
+      input.rack_row ?? '',
       now,
+      id
+    );
+  },
+
+  async updatePrices(id: string, buy_price: number, sell_price: number): Promise<void> {
+    const db = await getDatabase();
+    await db.runAsync(
+      'UPDATE spareparts SET buy_price = ?, sell_price = ?, updated_at = ? WHERE id = ?',
+      buy_price,
+      sell_price,
+      Date.now(),
       id
     );
   },

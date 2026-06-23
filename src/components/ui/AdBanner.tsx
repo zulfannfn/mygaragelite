@@ -35,12 +35,19 @@ const BANNER_RETRY_DELAY_MS = 6000;
 
 type FullScreenFormat = 'interstitial' | 'rewarded';
 
-function createFullScreenAdManager(format: FullScreenFormat) {
-  let instance: { show: () => Promise<void>; load: () => void } | null = null;
+type AdInstance = {
+  show: () => Promise<void>;
+  load: () => void;
+  addAdEventListener: (eventType: any, handler: (...args: any[]) => void) => () => void;
+};
+
+function createFullScreenAdManager(format: FullScreenFormat, throttle = false) {
+  let instance: AdInstance | null = null;
   let isLoaded = false;
   let wantShow = false;
   let showWaiters: Array<() => void> = [];
   let unsubs: Array<() => void> = [];
+  let callCount = 0;
 
   const label = format === 'interstitial' ? 'Interstitial' : 'Rewarded';
 
@@ -64,7 +71,8 @@ function createFullScreenAdManager(format: FullScreenFormat) {
     const RewardedAdEventType = getRewardedAdEventType();
     const AdClass = format === 'interstitial' ? getInterstitialAd() : getRewardedAd();
 
-    instance = AdClass.createForAdRequest(resolveAdUnitId(format), adRequestOptions);
+    const ad: AdInstance = AdClass.createForAdRequest(resolveAdUnitId(format), adRequestOptions);
+    instance = ad;
 
     const onLoaded = () => {
       isLoaded = true;
@@ -90,23 +98,23 @@ function createFullScreenAdManager(format: FullScreenFormat) {
     if (AdEventType) {
       if (format === 'interstitial') {
         unsubs.push(
-          instance.addAdEventListener(AdEventType.LOADED, onLoaded),
-          instance.addAdEventListener(AdEventType.CLOSED, onClosed),
-          instance.addAdEventListener(AdEventType.ERROR, onError),
+          ad.addAdEventListener(AdEventType.LOADED, onLoaded),
+          ad.addAdEventListener(AdEventType.CLOSED, onClosed),
+          ad.addAdEventListener(AdEventType.ERROR, onError),
         );
       } else if (RewardedAdEventType) {
         unsubs.push(
-          instance.addAdEventListener(RewardedAdEventType.LOADED, onLoaded),
-          instance.addAdEventListener(AdEventType.CLOSED, onClosed),
-          instance.addAdEventListener(AdEventType.ERROR, onError),
-          instance.addAdEventListener(RewardedAdEventType.EARNED_REWARD, (reward: unknown) => {
+          ad.addAdEventListener(RewardedAdEventType.LOADED, onLoaded),
+          ad.addAdEventListener(AdEventType.CLOSED, onClosed),
+          ad.addAdEventListener(AdEventType.ERROR, onError),
+          ad.addAdEventListener(RewardedAdEventType.EARNED_REWARD, (reward: unknown) => {
             if (__DEV__) console.log('[AdMob] Reward earned:', reward);
           }),
         );
       }
     }
 
-    instance.load();
+    ad.load();
   };
 
   const showInternal = async () => {
@@ -125,8 +133,16 @@ function createFullScreenAdManager(format: FullScreenFormat) {
     }
   };
 
-  /** Tampilkan hanya jika iklan sudah dimuat (atau tunggu max 10 detik). */
   const show = async (): Promise<void> => {
+    if (throttle) {
+      callCount++;
+      if (callCount < 3) {
+        if (__DEV__) console.log(`[AdMob] ${label} skipped (call ${callCount}/3)`);
+        return;
+      }
+      callCount = 0;
+    }
+
     await initializeAds();
     if (!isAdsAvailable()) {
       if (__DEV__) console.log(`[AdMob] ${label} skipped (not available)`);
@@ -163,8 +179,8 @@ function createFullScreenAdManager(format: FullScreenFormat) {
   return { load: preload, show };
 }
 
-const interstitialManager = createFullScreenAdManager('interstitial');
-const rewardedManager = createFullScreenAdManager('rewarded');
+const interstitialManager = createFullScreenAdManager('interstitial', true);
+const rewardedManager = createFullScreenAdManager('rewarded', false);
 
 function getBannerSize(): string {
   const BannerAdSize = getBannerAdSize();

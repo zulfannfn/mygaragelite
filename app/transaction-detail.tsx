@@ -1,18 +1,21 @@
 import { Ionicons } from '@expo/vector-icons';
+import DateTimePicker from '@react-native-community/datetimepicker';
+import * as Speech from 'expo-speech';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  Alert,
+  BackHandler,
   KeyboardAvoidingView,
   Modal,
   Platform,
   Pressable,
   ScrollView,
   Text,
+  TextInput,
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { InterstitialAd, RewardAd } from '../src/components/ui/AdBanner';
+import { AdBanner, InterstitialAd, RewardAd } from '../src/components/ui/AdBanner';
 import { AddServiceSheet } from '../src/components/ui/AddServiceSheet';
 import { AddSparepartSheet } from '../src/components/ui/AddSparepartSheet';
 import { Badge } from '../src/components/ui/Badge';
@@ -24,13 +27,14 @@ import { ScreenHeader } from '../src/components/ui/ScreenHeader';
 import { WhatsAppTemplateModal } from '../src/components/ui/WhatsAppTemplateModal';
 import { useTheme } from '../src/contexts/ThemeContext';
 import { receiptService } from '../src/services/receiptService';
+import { employeeService } from '../src/services/employeeService';
 import { transactionService } from '../src/services/transactionService';
 import { useTranslation } from '../src/i18n';
 import { useAppStore } from '../src/store/useAppStore';
 import { useTransactionStore } from '../src/store/useTransactionStore';
-import { Transaction } from '../src/types';
+import { Employee, Transaction } from '../src/types';
 import { formatCurrency, parseCurrency } from '../src/utils/currency';
-import { formatDateTime } from '../src/utils/date';
+import { formatDate, formatDateTime, formatDuration } from '../src/utils/date';
 import { handleReceiptPrintError } from '../src/utils/printerAlert';
 
 export default function TransactionDetail() {
@@ -44,7 +48,10 @@ export default function TransactionDetail() {
   const [tx, setTx] = useState<Transaction | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [confirmCancel, setConfirmCancel] = useState(false);
+  const [confirmStartWork, setConfirmStartWork] = useState(false);
+  const [confirmFinishWork, setConfirmFinishWork] = useState(false);
   const [actionBusy, setActionBusy] = useState<'print' | 'wa' | null>(null);
+  const [speaking, setSpeaking] = useState(false);
   const [waModalOpen, setWaModalOpen] = useState(false);
   const [addServiceOpen, setAddServiceOpen] = useState(false);
   const [addSparepartOpen, setAddSparepartOpen] = useState(false);
@@ -54,15 +61,51 @@ export default function TransactionDetail() {
   const [editMechanicNotes, setEditMechanicNotes] = useState(false);
   const [editRecommendation, setEditRecommendation] = useState(false);
   const [editComplaint, setEditComplaint] = useState(false);
+  const [editKilometer, setEditKilometer] = useState(false);
+  const [editCustomDiscount, setEditCustomDiscount] = useState(false);
+  const [tempCustomDiscount, setTempCustomDiscount] = useState('');
   const [tempMechanicNotes, setTempMechanicNotes] = useState('');
   const [tempRecommendation, setTempRecommendation] = useState('');
+  const [tempNextServiceDate, setTempNextServiceDate] = useState<number | null>(null);
+  const [showNextServiceDatePicker, setShowNextServiceDatePicker] = useState(false);
   const [tempComplaint, setTempComplaint] = useState('');
+  const [tempKilometer, setTempKilometer] = useState('');
   const [paymentPickerOpen, setPaymentPickerOpen] = useState(false);
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<string | null>(null);
   const [confirmPaidModal, setConfirmPaidModal] = useState(false);
   const [paidAmount, setPaidAmount] = useState('');
   const [receiptPickerOpen, setReceiptPickerOpen] = useState(false);
   const [selectedReceiptType, setSelectedReceiptType] = useState<'diterima' | 'tagihan'>('tagihan');
+  const [nowTick, setNowTick] = useState(Date.now());
+  const [editStaffOpen, setEditStaffOpen] = useState(false);
+  const [mechanics, setMechanics] = useState<Employee[]>([]);
+  const [cashiers, setCashiers] = useState<Employee[]>([]);
+  const [tempMechanicId, setTempMechanicId] = useState<string | null>(null);
+  const [tempMechanicName, setTempMechanicName] = useState<string | null>(null);
+  const [tempCashierId, setTempCashierId] = useState<string | null>(null);
+  const [tempCashierName, setTempCashierName] = useState<string | null>(null);
+  const [savingStaff, setSavingStaff] = useState(false);
+
+  // Durasi pengerjaan terus berjalan selama service sedang dikerjakan
+  const isRunningService = tx?.type === 'service' && tx?.status === 'in_progress';
+  useEffect(() => {
+    if (!isRunningService) return;
+    const timer = setInterval(() => setNowTick(Date.now()), 30000);
+    return () => clearInterval(timer);
+  }, [isRunningService]);
+
+  useEffect(() => {
+    return () => { Speech.stop(); };
+  }, []);
+
+  useEffect(() => {
+    if (!confirmPaidModal) return;
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      setConfirmPaidModal(false);
+      return true;
+    });
+    return () => sub.remove();
+  }, [confirmPaidModal]);
 
   const sectionLabel = {
     color: theme.colors.textSecondary,
@@ -122,6 +165,69 @@ export default function TransactionDetail() {
     showToast(t.common.cancelled, 'info');
   };
 
+  const markInProgress = async () => {
+    if (!id) return;
+    await updateStatus(id, 'in_progress', null);
+    setTx((p) => (p ? { ...p, status: 'in_progress' } : p));
+    showToast(t.common.success, 'success');
+  };
+
+  const markWaitingPayment = async () => {
+    if (!id) return;
+    await updateStatus(id, 'waiting_payment', null);
+    setTx((p) => (p ? { ...p, status: 'waiting_payment' } : p));
+    showToast(t.common.success, 'success');
+  };
+
+  const announcePayment = () => {
+    if (!tx) return;
+    const name = tx.customer_name ?? 'pelanggan';
+    const plate = tx.customer_plate ?? '-';
+    const text = `Perhatian, atas nama ${name} dengan nomor polisi ${plate} sudah selesai pengerjaan, silahkan ke kasir untuk melakukan pembayaran`;
+    setSpeaking(true);
+    Speech.speak(text, {
+      language: 'id-ID',
+      pitch: 1.0,
+      rate: 0.9,
+      onDone: () => setSpeaking(false),
+      onError: () => setSpeaking(false),
+    });
+  };
+
+  const openEditStaff = async () => {
+    const [mechs, cash] = await Promise.all([
+      employeeService.getMechanics(),
+      employeeService.getCashiers(),
+    ]);
+    setMechanics(mechs);
+    setCashiers(cash);
+    setTempMechanicId(tx?.mechanic_id ?? null);
+    setTempMechanicName(tx?.mechanic_name ?? null);
+    setTempCashierId(tx?.cashier_id ?? null);
+    setTempCashierName(tx?.cashier_name ?? null);
+    setEditStaffOpen(true);
+  };
+
+  const saveStaff = async () => {
+    if (!tx) return;
+    setSavingStaff(true);
+    try {
+      await transactionService.updateMeta(tx.id, {
+        mechanic_id: tempMechanicId,
+        cashier_id: tempCashierId,
+        cashier_name: tempCashierName ?? '',
+      });
+      await reloadTx();
+      await reloadList();
+      setEditStaffOpen(false);
+      showToast(t.common.success, 'success');
+    } catch (e: any) {
+      showToast('Gagal: ' + (e?.message ?? ''), 'error');
+    } finally {
+      setSavingStaff(false);
+    }
+  };
+
   const handleDelete = async () => {
     setConfirmDelete(false);
     if (!id) return;
@@ -170,7 +276,8 @@ export default function TransactionDetail() {
 
   const handleAddSparepart = async (
     sp: { id: string; name: string; sell_price: number },
-    qty: number
+    qty: number,
+    discount: number = 0
   ) => {
     if (!tx) return;
     try {
@@ -179,6 +286,7 @@ export default function TransactionDetail() {
         sparepart_name: sp.name,
         quantity: qty,
         sell_price: sp.sell_price,
+        discount_per_item: discount,
       });
       await reloadTx();
       await reloadList();
@@ -222,7 +330,10 @@ export default function TransactionDetail() {
   const saveRecommendation = async () => {
     if (!tx) return;
     try {
-      await transactionService.updateMeta(tx.id, { recommendation: tempRecommendation });
+      await transactionService.updateMeta(tx.id, {
+        recommendation: tempRecommendation,
+        next_service_date: tempNextServiceDate,
+      });
       await reloadTx();
       setEditRecommendation(false);
       showToast(t.transactions.recommendationSaved, 'success');
@@ -243,6 +354,37 @@ export default function TransactionDetail() {
     }
   };
 
+  const saveKilometer = async () => {
+    if (!tx) return;
+    const km = parseInt(tempKilometer.replace(/\D/g, ''), 10);
+    try {
+      await transactionService.updateMeta(tx.id, { kilometer: isNaN(km) ? null : km });
+      await reloadTx();
+      setEditKilometer(false);
+      showToast(t.transactions.kilometerSaved, 'success');
+    } catch (e: any) {
+      showToast('Gagal: ' + (e?.message ?? ''), 'error');
+    }
+  };
+
+  const saveCustomDiscount = async () => {
+    if (!tx) return;
+    const raw = parseInt(tempCustomDiscount.replace(/[^0-9]/g, ''), 10);
+    const availableMargin = (tx.spareparts ?? []).reduce(
+      (s, p) => s + (p.sell_price - (p.buy_price ?? 0) - (p.discount_per_item ?? 0)) * p.quantity,
+      0
+    );
+    const val = isNaN(raw) ? 0 : Math.min(raw, Math.max(0, availableMargin));
+    try {
+      await transactionService.updateMeta(tx.id, { custom_discount: val });
+      await reloadTx();
+      setEditCustomDiscount(false);
+      showToast('Diskon custom disimpan', 'success');
+    } catch (e: any) {
+      showToast('Gagal: ' + (e?.message ?? ''), 'error');
+    }
+  };
+
   const startEditMechanicNotes = () => {
     setTempMechanicNotes(tx?.mechanic_notes ?? '');
     setEditMechanicNotes(true);
@@ -250,8 +392,68 @@ export default function TransactionDetail() {
 
   const startEditRecommendation = () => {
     setTempRecommendation(tx?.recommendation ?? '');
+    setTempNextServiceDate(tx?.next_service_date ?? null);
     setEditRecommendation(true);
   };
+
+  const renderNextServiceDateField = () => (
+    <>
+      <Pressable
+        onPress={() => setShowNextServiceDatePicker(true)}
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: 8,
+          marginTop: 8,
+          padding: 10,
+          borderRadius: theme.radius.md,
+          borderWidth: 1,
+          borderColor: theme.colors.border,
+          backgroundColor: theme.colors.cardLight,
+        }}
+      >
+        <Ionicons name="calendar-outline" size={16} color={theme.colors.accent} />
+        <Text style={{ color: tempNextServiceDate ? theme.colors.text : theme.colors.textMuted, fontSize: 13 }}>
+          {tempNextServiceDate ? formatDate(tempNextServiceDate) : t.transactions.nextServiceDatePlaceholder}
+        </Text>
+      </Pressable>
+      {showNextServiceDatePicker && Platform.OS === 'ios' ? (
+        <View style={{ marginTop: 4 }}>
+          <DateTimePicker
+            value={new Date(tempNextServiceDate ?? Date.now())}
+            mode="date"
+            display="spinner"
+            onChange={(_, date) => {
+              if (date) {
+                const d = new Date(date);
+                d.setHours(0, 0, 0, 0);
+                setTempNextServiceDate(d.getTime());
+              }
+            }}
+            style={{ height: 130 }}
+          />
+          <Pressable onPress={() => setShowNextServiceDatePicker(false)} style={{ alignItems: 'center', paddingVertical: 8 }}>
+            <Text style={{ color: theme.colors.accent, fontWeight: '700', fontSize: 14 }}>{t.common.done}</Text>
+          </Pressable>
+        </View>
+      ) : null}
+      {showNextServiceDatePicker && Platform.OS === 'android' ? (
+        <DateTimePicker
+          value={new Date(tempNextServiceDate ?? Date.now())}
+          mode="date"
+          display="default"
+          onChange={(event, date) => {
+            setShowNextServiceDatePicker(false);
+            if (event.type === 'set' && date) {
+              const d = new Date(date);
+              d.setHours(0, 0, 0, 0);
+              setTempNextServiceDate(d.getTime());
+            }
+          }}
+        />
+      ) : null}
+    </>
+  );
 
   const startEditComplaint = () => {
     setTempComplaint(tx?.complaint ?? '');
@@ -283,8 +485,28 @@ export default function TransactionDetail() {
                 variant={tx.type === 'retail' ? 'info' : 'accent'}
               />
               <Badge
-                label={tx.status === 'paid' ? t.common.paid : tx.status === 'pending' ? t.common.pending : t.common.cancelled}
-                variant={tx.status === 'paid' ? 'success' : tx.status === 'pending' ? 'warning' : 'danger'}
+                label={
+                  tx.status === 'paid'
+                    ? t.common.paid
+                    : tx.status === 'in_progress'
+                      ? t.common.inProgress
+                      : tx.status === 'waiting_payment'
+                        ? t.common.waitingPayment
+                        : tx.status === 'pending'
+                          ? t.common.pending
+                          : t.common.cancelled
+                }
+                variant={
+                  tx.status === 'paid'
+                    ? 'success'
+                    : tx.status === 'in_progress'
+                      ? 'info'
+                      : tx.status === 'waiting_payment'
+                        ? 'accent'
+                        : tx.status === 'pending'
+                          ? 'warning'
+                          : 'danger'
+                }
               />
             </View>
           </View>
@@ -292,8 +514,21 @@ export default function TransactionDetail() {
             {formatCurrency(tx.total_amount)}
           </Text>
           <Text style={{ color: 'rgba(255,255,255,0.6)', fontSize: 12, marginTop: 6 }}>
-            {formatDateTime(tx.created_at)} {tx.payment_method ? `• ${tx.payment_method}` : ''}
+            {tx.type === 'service' ? formatDateTime(tx.created_at) : formatDate(tx.created_at)}
+            {tx.payment_method ? ` • ${tx.payment_method}` : ''}
           </Text>
+          {tx.type === 'service' ? (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 8 }}>
+              <Ionicons
+                name={isRunningService ? 'time' : 'timer-outline'}
+                size={13}
+                color="#fff"
+              />
+              <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>
+                {isRunningService ? t.transactions.workDurationRunning : t.transactions.workDuration}: {formatDuration(tx.created_at, tx.status === 'paid' ? tx.updated_at : nowTick)}
+              </Text>
+            </View>
+          ) : null}
         </Card>
 
         {/* Customer */}
@@ -302,27 +537,95 @@ export default function TransactionDetail() {
           <Text style={{ color: theme.colors.text, fontSize: 16, fontWeight: '700', marginTop: 4 }}>
             {tx.customer_name ?? '-'}
           </Text>
-          <Text style={{ color: theme.colors.textSecondary, fontSize: 13, marginTop: 2 }}>
-            {tx.customer_plate ?? '-'}
-            {tx.customer_phone ? ` • ${tx.customer_phone}` : ''}
-          </Text>
-          {tx.mechanic_name && tx.type !== 'retail' ? (
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8 }}>
-              <Ionicons name="construct" size={14} color={theme.colors.accent} />
-              <Text style={{ color: theme.colors.textSecondary, fontSize: 12 }}>
-                {t.transactions.mechanic}: <Text style={{ color: theme.colors.text, fontWeight: '700' }}>{tx.mechanic_name}</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8 }}>
+            <Ionicons name="card-outline" size={14} color={theme.colors.textMuted} />
+            <Text style={{ color: theme.colors.textSecondary, fontSize: 13 }}>
+              {tx.customer_plate ?? '-'}
+            </Text>
+          </View>
+          {tx.customer_phone ? (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6 }}>
+              <Ionicons name="call-outline" size={14} color={theme.colors.textMuted} />
+              <Text style={{ color: theme.colors.textSecondary, fontSize: 13 }}>
+                {tx.customer_phone}
               </Text>
             </View>
           ) : null}
-          {tx.cashier_name ? (
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8 }}>
-              <Ionicons name="person" size={14} color={theme.colors.success} />
-              <Text style={{ color: theme.colors.textSecondary, fontSize: 12 }}>
-                {t.transactions.cashier}: <Text style={{ color: theme.colors.text, fontWeight: '700' }}>{tx.cashier_name}</Text>
+          {(tx.customer_vehicle_brand || tx.customer_vehicle_type) ? (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6 }}>
+              <Ionicons
+                name={tx.customer_vehicle_type === 'Mobil' ? 'car-outline' : 'bicycle-outline'}
+                size={14}
+                color={theme.colors.textMuted}
+              />
+              <Text style={{ color: theme.colors.textSecondary, fontSize: 13 }}>
+                {[tx.customer_vehicle_type, tx.customer_vehicle_brand].filter(Boolean).join(' • ')}
               </Text>
             </View>
           ) : null}
         </Card>
+
+        {/* Petugas: Mekanik & Kasir */}
+        {((tx.mechanic_name && tx.type !== 'retail') || tx.cashier_name) ? (
+          <Card style={{ marginBottom: 12 }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Text style={sectionLabel}>{t.transactions.sectionStaff}</Text>
+              {tx.status === 'pending' && (
+                <Pressable onPress={openEditStaff} hitSlop={8}>
+                  <Ionicons name="create" size={16} color={theme.colors.accent} />
+                </Pressable>
+              )}
+            </View>
+            {tx.mechanic_name && tx.type !== 'retail' ? (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 8 }}>
+                <View
+                  style={{
+                    width: 34,
+                    height: 34,
+                    borderRadius: 17,
+                    backgroundColor: theme.colors.accent + '1F',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <Ionicons name="construct" size={16} color={theme.colors.accent} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ color: theme.colors.textMuted, fontSize: 11 }}>
+                    {t.transactions.mechanic}
+                  </Text>
+                  <Text style={{ color: theme.colors.text, fontSize: 14, fontWeight: '700' }}>
+                    {tx.mechanic_name}
+                  </Text>
+                </View>
+              </View>
+            ) : null}
+            {tx.cashier_name ? (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 12 }}>
+                <View
+                  style={{
+                    width: 34,
+                    height: 34,
+                    borderRadius: 17,
+                    backgroundColor: theme.colors.success + '1F',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <Ionicons name="person" size={16} color={theme.colors.success} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ color: theme.colors.textMuted, fontSize: 11 }}>
+                    {t.transactions.cashier}
+                  </Text>
+                  <Text style={{ color: theme.colors.text, fontSize: 14, fontWeight: '700' }}>
+                    {tx.cashier_name}
+                  </Text>
+                </View>
+              </View>
+            ) : null}
+          </Card>
+        ) : null}
 
         {tx.type !== 'retail' && (
           <>
@@ -363,7 +666,7 @@ export default function TransactionDetail() {
                 <Card style={{ marginBottom: 12 }}>
                   <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
                     <Text style={sectionLabel}>{t.transactions.sectionComplaint}</Text>
-                    {tx.status === 'pending' && (
+                    {(tx.status === 'pending' || tx.status === 'in_progress') && (
                       <Pressable onPress={startEditComplaint} hitSlop={8}>
                         <Ionicons name="create" size={16} color={theme.colors.accent} />
                       </Pressable>
@@ -375,7 +678,7 @@ export default function TransactionDetail() {
                 </Card>
               )
             ) : (
-              tx.status === 'pending' && (
+              (tx.status === 'pending' || tx.status === 'in_progress') && (
                 <Card style={{ marginBottom: 12 }}>
                   <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                     <Text style={sectionLabel}>{t.transactions.sectionComplaint}</Text>
@@ -400,8 +703,61 @@ export default function TransactionDetail() {
           </>
         )}
 
+        {tx.type === 'service' && (tx.status === 'in_progress' || tx.status === 'waiting_payment' || tx.status === 'paid') && (
+          tx.kilometer != null ? (
+            editKilometer ? (
+              <Card style={{ marginBottom: 12 }}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                  <Text style={sectionLabel}>{t.transactions.sectionKilometer}</Text>
+                  <Pressable onPress={() => setEditKilometer(false)} hitSlop={8}>
+                    <Ionicons name="close" size={20} color={theme.colors.textSecondary} />
+                  </Pressable>
+                </View>
+                <Input
+                  value={tempKilometer}
+                  onChangeText={setTempKilometer}
+                  placeholder={t.transactions.kilometerPlaceholder}
+                  keyboardType="numeric"
+                />
+                <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
+                  <Button title={t.common.save} size="sm" onPress={saveKilometer} style={{ flex: 1 }} />
+                  <Button title={t.common.cancel} variant="ghost" size="sm" onPress={() => setEditKilometer(false)} style={{ flex: 1 }} />
+                </View>
+              </Card>
+            ) : (
+              <Card style={{ marginBottom: 12 }}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                  <Text style={sectionLabel}>{t.transactions.sectionKilometer}</Text>
+                  {tx.status !== 'paid' && (
+                    <Pressable onPress={() => { setTempKilometer(String(tx.kilometer ?? '')); setEditKilometer(true); }} hitSlop={8}>
+                      <Ionicons name="create" size={16} color={theme.colors.accent} />
+                    </Pressable>
+                  )}
+                </View>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 }}>
+                  <Ionicons name="speedometer-outline" size={16} color={theme.colors.textMuted} />
+                  <Text style={{ color: theme.colors.text, fontSize: 15, fontWeight: '700' }}>
+                    {tx.kilometer?.toLocaleString()} km
+                  </Text>
+                </View>
+              </Card>
+            )
+          ) : tx.status !== 'paid' ? (
+            <Card style={{ marginBottom: 12 }}>
+              <Text style={[sectionLabel, { marginBottom: 8 }]}>{t.transactions.sectionKilometer}</Text>
+              <Input
+                value={tempKilometer}
+                onChangeText={setTempKilometer}
+                placeholder={t.transactions.kilometerPlaceholder}
+                keyboardType="numeric"
+              />
+              <Button title={t.common.save} size="sm" onPress={saveKilometer} style={{ marginTop: 8 }} />
+            </Card>
+          ) : null
+        )}
+
         {/* Services */}
-        {tx.type !== 'retail' && (tx.status === 'pending' ||
+        {tx.type !== 'retail' && (tx.status === 'in_progress' || tx.status === 'waiting_payment' ||
           (tx.service_items && tx.service_items.length > 0)) && (
           <Card style={{ marginBottom: 12 }}>
             <View
@@ -413,7 +769,7 @@ export default function TransactionDetail() {
               }}
             >
               <Text style={sectionLabel}>{t.transactions.sectionServices}</Text>
-              {tx.status === 'pending' ? (
+              {tx.status === 'in_progress' ? (
                 <Pressable
                   onPress={() => setAddServiceOpen(true)}
                   style={({ pressed }) => ({
@@ -478,7 +834,7 @@ export default function TransactionDetail() {
                   >
                     {formatCurrency(s.price)}
                   </Text>
-                  {tx.status === 'pending' ? (
+                  {tx.status === 'in_progress' ? (
                     <Pressable
                       onPress={() =>
                         setConfirmRemoveItem({
@@ -538,7 +894,7 @@ export default function TransactionDetail() {
         )}
 
         {/* Spareparts */}
-        {(tx.status === 'pending' ||
+        {(tx.status === 'in_progress' || tx.status === 'waiting_payment' ||
           (tx.spareparts && tx.spareparts.length > 0)) && (
           <Card style={{ marginBottom: 12 }}>
             <View
@@ -550,7 +906,7 @@ export default function TransactionDetail() {
               }}
             >
               <Text style={sectionLabel}>SPAREPART</Text>
-              {tx.status === 'pending' ? (
+              {tx.status === 'in_progress' ? (
                 <Pressable
                   onPress={() => setAddSparepartOpen(true)}
                   style={({ pressed }) => ({
@@ -611,13 +967,28 @@ export default function TransactionDetail() {
                     <Text style={{ color: theme.colors.textMuted, fontSize: 12, marginTop: 2 }}>
                       {formatCurrency(p.sell_price)} × {p.quantity}
                     </Text>
+                    {(p.buy_price ?? 0) > 0 && (
+                      <Text style={{ color: theme.colors.warning, fontSize: 11, marginTop: 1 }}>
+                        Beli: {formatCurrency(p.buy_price ?? 0)}
+                      </Text>
+                    )}
+                    {(p.discount_per_item ?? 0) > 0 && (
+                      <Text style={{ color: theme.colors.danger, fontSize: 11, marginTop: 1 }}>
+                        Diskon -{formatCurrency(p.discount_per_item!)} /item = -{formatCurrency(p.discount_per_item! * p.quantity)}
+                      </Text>
+                    )}
                   </View>
-                  <Text
-                    style={{ color: theme.colors.accent, fontWeight: '700', fontSize: 15 }}
-                  >
-                    {formatCurrency(p.sell_price * p.quantity)}
-                  </Text>
-                  {tx.status === 'pending' ? (
+                  <View style={{ alignItems: 'flex-end' }}>
+                    {(p.discount_per_item ?? 0) > 0 && (
+                      <Text style={{ color: theme.colors.textMuted, fontSize: 11, textDecorationLine: 'line-through' }}>
+                        {formatCurrency(p.sell_price * p.quantity)}
+                      </Text>
+                    )}
+                    <Text style={{ color: theme.colors.accent, fontWeight: '700', fontSize: 15 }}>
+                      {formatCurrency((p.sell_price - (p.discount_per_item ?? 0)) * p.quantity)}
+                    </Text>
+                  </View>
+                  {tx.status === 'in_progress' ? (
                     <Pressable
                       onPress={() =>
                         setConfirmRemoveItem({
@@ -660,18 +1031,154 @@ export default function TransactionDetail() {
               </Text>
             )}
             {tx.spareparts && tx.spareparts.length > 0 ? (
-              <View
-                style={{
-                  flexDirection: 'row',
-                  justifyContent: 'space-between',
-                  paddingTop: 8,
-                }}
-              >
-                <Text style={{ color: theme.colors.textSecondary }}>{t.transactions.total}</Text>
-                <Text style={{ color: theme.colors.text, fontWeight: '700' }}>
-                  {formatCurrency(tx.total_sparepart)}
-                </Text>
-              </View>
+              <>
+                {/* Discount summary + custom discount + total */}
+                <View style={{ borderTopWidth: 1, borderTopColor: theme.colors.divider, marginTop: 8, paddingTop: 8, gap: 6 }}>
+                  {(() => {
+                    const totalItemDiscount = (tx.spareparts ?? []).reduce(
+                      (s, p) => s + (p.discount_per_item ?? 0) * p.quantity, 0
+                    );
+                    if (totalItemDiscount <= 0) return null;
+                    return (
+                      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <Text style={{ color: theme.colors.textSecondary, fontSize: 12 }}>Total Diskon Item</Text>
+                        <Text style={{ color: theme.colors.danger, fontSize: 13, fontWeight: '700' }}>
+                          -{formatCurrency(totalItemDiscount)}
+                        </Text>
+                      </View>
+                    );
+                  })()}
+                  {(() => {
+                    const availableMargin = (tx.spareparts ?? []).reduce(
+                      (s, p) => s + (p.sell_price - (p.buy_price ?? 0) - (p.discount_per_item ?? 0)) * p.quantity, 0
+                    );
+                    const inputVal = parseInt(tempCustomDiscount.replace(/[^0-9]/g, ''), 10) || 0;
+                    const remainingMargin = availableMargin - (editCustomDiscount ? inputVal : (tx.custom_discount ?? 0));
+                    return (
+                      <>
+                        {editCustomDiscount ? (
+                          <View style={{ gap: 6 }}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                              <View style={{ flex: 1 }}>
+                                <Text style={{ color: theme.colors.textSecondary, fontSize: 12 }}>Diskon Custom (Rp)</Text>
+                                {availableMargin > 0 && (
+                                  <Text style={{ color: theme.colors.textMuted, fontSize: 10 }}>
+                                    maks. {formatCurrency(availableMargin)}
+                                  </Text>
+                                )}
+                              </View>
+                              <TextInput
+                                value={tempCustomDiscount}
+                                onChangeText={(v) => {
+                                  const clean = v.replace(/[^0-9]/g, '');
+                                  const n = parseInt(clean, 10) || 0;
+                                  const capped = Math.min(n, Math.max(0, availableMargin));
+                                  setTempCustomDiscount(capped === n ? clean : String(capped));
+                                }}
+                                keyboardType="numeric"
+                                placeholder="0"
+                                placeholderTextColor={theme.colors.textMuted}
+                                autoFocus
+                                style={{
+                                  color: theme.colors.text,
+                                  fontSize: 13,
+                                  borderWidth: 1,
+                                  borderColor: theme.colors.danger,
+                                  borderRadius: theme.radius.sm,
+                                  paddingHorizontal: 10,
+                                  paddingVertical: 4,
+                                  backgroundColor: theme.colors.surface,
+                                  minWidth: 110,
+                                  textAlign: 'right',
+                                }}
+                              />
+                              <Pressable onPress={saveCustomDiscount} hitSlop={8}>
+                                <Ionicons name="checkmark-circle" size={22} color={theme.colors.success} />
+                              </Pressable>
+                              <Pressable onPress={() => setEditCustomDiscount(false)} hitSlop={8}>
+                                <Ionicons name="close-circle" size={22} color={theme.colors.textMuted} />
+                              </Pressable>
+                            </View>
+                            {availableMargin > 0 && (
+                              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                                  <Ionicons name="trending-up" size={11} color={theme.colors.success} />
+                                  <Text style={{ color: theme.colors.textMuted, fontSize: 11 }}>Sisa margin</Text>
+                                </View>
+                                <Text style={{ color: theme.colors.success, fontSize: 12, fontWeight: '700' }}>
+                                  {formatCurrency(Math.max(0, remainingMargin))}
+                                </Text>
+                              </View>
+                            )}
+                          </View>
+                        ) : (
+                          <View style={{ gap: 4 }}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                              <Text style={{ color: theme.colors.textSecondary, fontSize: 12 }}>Diskon Custom</Text>
+                              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                                {(tx.custom_discount ?? 0) > 0 ? (
+                                  <Text style={{ color: theme.colors.danger, fontSize: 13, fontWeight: '700' }}>
+                                    -{formatCurrency(tx.custom_discount ?? 0)}
+                                  </Text>
+                                ) : (
+                                  <Text style={{ color: theme.colors.textMuted, fontSize: 12 }}>Belum ada</Text>
+                                )}
+                                {tx.status === 'in_progress' && (
+                                  <Pressable
+                                    onPress={() => { setTempCustomDiscount(String(tx.custom_discount && tx.custom_discount > 0 ? tx.custom_discount : '')); setEditCustomDiscount(true); }}
+                                    hitSlop={8}
+                                  >
+                                    <Ionicons name="create-outline" size={16} color={theme.colors.accent} />
+                                  </Pressable>
+                                )}
+                              </View>
+                            </View>
+                            {availableMargin > 0 && (
+                              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                                  <Ionicons name="trending-up" size={11} color={theme.colors.success} />
+                                  <Text style={{ color: theme.colors.textMuted, fontSize: 11 }}>Sisa margin</Text>
+                                </View>
+                                <Text style={{ color: theme.colors.success, fontSize: 12, fontWeight: '700' }}>
+                                  {formatCurrency(Math.max(0, remainingMargin))}
+                                </Text>
+                              </View>
+                            )}
+                          </View>
+                        )}
+                      </>
+                    );
+                  })()}
+                  {(() => {
+                    const grossSp = (tx.spareparts ?? []).reduce((s, p) => s + p.sell_price * p.quantity, 0);
+                    const itemDisc = (tx.spareparts ?? []).reduce((s, p) => s + (p.discount_per_item ?? 0) * p.quantity, 0);
+                    const custDisc = tx.custom_discount ?? 0;
+                    const totalDisc = itemDisc + custDisc;
+                    const hasDisc = totalDisc > 0;
+                    const final = tx.total_sparepart - custDisc;
+                    return (
+                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', paddingTop: 6, borderTopWidth: 1, borderTopColor: theme.colors.divider, marginTop: 4 }}>
+                        <View style={{ flex: 1, marginRight: 8 }}>
+                          <Text style={{ color: theme.colors.textSecondary, fontSize: 12, fontWeight: '600' }}>
+                            {t.transactions.total}
+                          </Text>
+                          {hasDisc && (
+                            <Text style={{ fontSize: 10, marginTop: 2, lineHeight: 14 }}>
+                              <Text style={{ color: '#fff' }}>{formatCurrency(grossSp)}</Text>
+                              <Text style={{ color: theme.colors.textMuted }}>{' - '}</Text>
+                              <Text style={{ color: theme.colors.danger }}>{formatCurrency(totalDisc)}</Text>
+                              <Text style={{ color: theme.colors.textMuted }}>{' ='}</Text>
+                            </Text>
+                          )}
+                        </View>
+                        <Text style={{ color: theme.colors.text, fontWeight: '700', fontSize: 14 }}>
+                          {formatCurrency(final)}
+                        </Text>
+                      </View>
+                    );
+                  })()}
+                </View>
+              </>
             ) : null}
           </Card>
         )}
@@ -695,6 +1202,7 @@ export default function TransactionDetail() {
                     numberOfLines={3}
                     style={{ minHeight: 80 }}
                   />
+                  {renderNextServiceDateField()}
                   <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
                     <Button
                       title={t.common.save}
@@ -715,7 +1223,7 @@ export default function TransactionDetail() {
                 <Card style={{ marginBottom: 12 }}>
                   <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
                     <Text style={sectionLabel}>{t.transactions.sectionRecommendation}</Text>
-                    {tx.status !== 'paid' && (
+                    {tx.status === 'in_progress' && (
                       <Pressable onPress={startEditRecommendation} hitSlop={8}>
                         <Ionicons name="create" size={16} color={theme.colors.accent} />
                       </Pressable>
@@ -724,10 +1232,18 @@ export default function TransactionDetail() {
                   <Text style={{ color: theme.colors.text, marginTop: 4, lineHeight: 20 }}>
                     {tx.recommendation}
                   </Text>
+                  {tx.next_service_date ? (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8 }}>
+                      <Ionicons name="calendar-outline" size={13} color={theme.colors.accent} />
+                      <Text style={{ color: theme.colors.accent, fontSize: 12, fontWeight: '700' }}>
+                        {t.transactions.nextServiceDate}: {formatDate(tx.next_service_date)}
+                      </Text>
+                    </View>
+                  ) : null}
                 </Card>
               )
             ) : (
-              tx.status === 'pending' && (
+              tx.status === 'in_progress' && (
                 <Card style={{ marginBottom: 12 }}>
                   <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                     <Text style={sectionLabel}>{t.transactions.sectionRecommendation}</Text>
@@ -740,6 +1256,7 @@ export default function TransactionDetail() {
                     numberOfLines={3}
                     style={{ minHeight: 80 }}
                   />
+                  {renderNextServiceDateField()}
                   <Button
                     title={t.common.save}
                     size="sm"
@@ -787,7 +1304,7 @@ export default function TransactionDetail() {
                 <Card style={{ marginBottom: 12 }}>
                   <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
                     <Text style={sectionLabel}>{t.transactions.sectionMechanicNotes}</Text>
-                    {tx.status !== 'paid' && (
+                    {tx.status === 'in_progress' && (
                       <Pressable onPress={startEditMechanicNotes} hitSlop={8}>
                         <Ionicons name="create" size={16} color={theme.colors.accent} />
                       </Pressable>
@@ -797,7 +1314,7 @@ export default function TransactionDetail() {
                 </Card>
               )
             ) : (
-              tx.status === 'pending' && (
+              tx.status === 'in_progress' && (
                 <Card style={{ marginBottom: 12 }}>
                   <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                     <Text style={sectionLabel}>{t.transactions.sectionMechanicNotes}</Text>
@@ -859,54 +1376,98 @@ export default function TransactionDetail() {
           </Card>
         )}
 
-        {/* Receipt actions */}
-        <View style={{ flexDirection: 'row', gap: 10, marginTop: 8, marginBottom: 8 }}>
-          <Button
-            title={t.transactions.sendWA}
-            variant="success"
-            size="lg"
-            onPress={openWaTemplate}
-            disabled={!tx.customer_phone}
-            icon={<Ionicons name="logo-whatsapp" size={18} color="#fff" />}
-            style={{ flex: 1 }}
-          />
-          <Button
-            title={t.common.print}
-            variant="secondary"
-            size="lg"
-            onPress={() => setReceiptPickerOpen(true)}
-            icon={<Ionicons name="print" size={18} color="#fff" />}
-            style={{ flex: 1 }}
-          />
-        </View>
+        {/* Voice announcement — only for waiting_payment */}
+        {tx.status === 'waiting_payment' && (
+          <Pressable
+            onPress={speaking ? () => { Speech.stop(); setSpeaking(false); } : announcePayment}
+            style={({ pressed }) => ({
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 10,
+              marginTop: 8,
+              marginBottom: 4,
+              paddingVertical: 14,
+              borderRadius: 14,
+              backgroundColor: speaking ? '#A855F7' : '#A855F720',
+              borderWidth: 1.5,
+              borderColor: '#A855F7',
+              opacity: pressed ? 0.8 : 1,
+            })}
+          >
+            <Ionicons
+              name={speaking ? 'stop-circle' : 'volume-high'}
+              size={22}
+              color={speaking ? '#fff' : '#A855F7'}
+            />
+            <Text style={{
+              color: speaking ? '#fff' : '#A855F7',
+              fontSize: 15,
+              fontWeight: '700',
+            }}>
+              {speaking ? 'Hentikan Panggilan' : t.transactions.callToPayment}
+            </Text>
+          </Pressable>
+        )}
+
+        {/* Receipt actions — WA & Print (hidden while in_progress) */}
+        {tx.status !== 'cancelled' && tx.status !== 'in_progress' && (
+          <View style={{ flexDirection: 'row', gap: 10, marginTop: 8, marginBottom: 8 }}>
+            <Button
+              title={t.transactions.sendWA}
+              variant="success"
+              size="lg"
+              onPress={openWaTemplate}
+              disabled={!tx.customer_phone}
+              icon={<Ionicons name="logo-whatsapp" size={18} color="#fff" />}
+              style={{ flex: 1 }}
+            />
+            <Button
+              title={t.common.print}
+              variant="secondary"
+              size="lg"
+              onPress={() => setReceiptPickerOpen(true)}
+              icon={<Ionicons name="print" size={18} color="#fff" />}
+              style={{ flex: 1 }}
+            />
+          </View>
+        )}
 
         {/* Actions */}
         <View style={{ gap: 10, marginTop: 8 }}>
+          {/* PENDING: Mulai Kerjakan */}
           {tx.status === 'pending' && tx.type !== 'retail' && (
             <Button
-              title={t.transactions.markPaid}
-              onPress={() => {
-                const isComplete =
-                  tx.complaint?.trim() &&
-                  tx.service_items && tx.service_items.length > 0 &&
-                  tx.spareparts && tx.spareparts.length > 0 &&
-                  tx.recommendation?.trim() &&
-                  tx.mechanic_notes?.trim();
-
-                if (!isComplete) {
-                  Alert.alert(t.common.attention, t.transactions.completeFormFirst);
-                  return;
-                }
-                setPaymentPickerOpen(true);
-              }}
+              title={t.transactions.startWork}
+              onPress={() => setConfirmStartWork(true)}
               size="lg"
               fullWidth
-              style={{
-                opacity: (tx.complaint?.trim() && tx.service_items?.length && tx.spareparts?.length && tx.recommendation?.trim() && tx.mechanic_notes?.trim()) ? 1 : 0.5
-              }}
-              icon={<Ionicons name="checkmark-circle" size={18} color="#fff" />}
+              icon={<Ionicons name="play-circle" size={18} color="#fff" />}
             />
           )}
+
+          {/* IN_PROGRESS: Selesai Dikerjakan → pindah ke waiting_payment */}
+          {tx.status === 'in_progress' && tx.type !== 'retail' && (
+            <Button
+              title={t.transactions.finishWork}
+              onPress={() => setConfirmFinishWork(true)}
+              size="lg"
+              fullWidth
+              icon={<Ionicons name="checkmark-done-circle" size={18} color="#fff" />}
+            />
+          )}
+
+          {/* WAITING_PAYMENT: Bayar */}
+          {tx.status === 'waiting_payment' && (
+            <Button
+              title={t.transactions.savePay}
+              onPress={() => setPaymentPickerOpen(true)}
+              size="lg"
+              fullWidth
+              icon={<Ionicons name="cash" size={18} color="#fff" />}
+            />
+          )}
+
           {tx.status !== 'cancelled' && (
             <Button
               title={t.common.delete}
@@ -923,6 +1484,7 @@ export default function TransactionDetail() {
               fullWidth
             />
           )}
+          <AdBanner />
         </View>
       </ScrollView>
 
@@ -943,6 +1505,24 @@ export default function TransactionDetail() {
         confirmText={t.common.cancel}
         onConfirm={handleConfirmCancel}
         onCancel={() => setConfirmCancel(false)}
+      />
+
+      <ConfirmDialog
+        visible={confirmStartWork}
+        title="Mulai Pekerjaan?"
+        message={`Pekerjaan akan dikerjakan oleh mekanik: ${tx?.mechanic_name ?? 'Tidak ditentukan'}`}
+        confirmText="Mulai Kerjakan"
+        onConfirm={() => { setConfirmStartWork(false); markInProgress(); }}
+        onCancel={() => setConfirmStartWork(false)}
+      />
+
+      <ConfirmDialog
+        visible={confirmFinishWork}
+        title="Selesai Dikerjakan?"
+        message="Sudah yakin akan menyelesaikan pekerjaan?"
+        confirmText="Ya, Selesai"
+        onConfirm={() => { setConfirmFinishWork(false); markWaitingPayment(); }}
+        onCancel={() => setConfirmFinishWork(false)}
       />
 
       <ConfirmDialog
@@ -967,7 +1547,7 @@ export default function TransactionDetail() {
       <AddSparepartSheet
         visible={addSparepartOpen}
         onClose={() => setAddSparepartOpen(false)}
-        onPick={(sp, qty) => handleAddSparepart(sp, qty)}
+        onPick={(sp, qty, discount) => handleAddSparepart(sp, qty, discount)}
       />
 
       <WhatsAppTemplateModal
@@ -1026,92 +1606,55 @@ export default function TransactionDetail() {
             </View>
             <View style={{ paddingHorizontal: 16, paddingBottom: 4, gap: 8 }}>
               {tx.status === 'pending' ? (
-                <>
-                  <Card
-                    onPress={() => {
-                      setSelectedReceiptType('diterima');
-                      setReceiptPickerOpen(false);
-                      router.push(`/receipt?id=${tx.id}&type=diterima` as any);
-                    }}
-                    style={{
-                      borderColor: selectedReceiptType === 'diterima' ? theme.colors.accent + '40' : theme.colors.border,
-                      borderWidth: selectedReceiptType === 'diterima' ? 1.5 : 1,
-                    }}
-                    padding="sm"
-                  >
-                    <View style={{ flexDirection: 'row', alignItems: 'center', width: '100%' }}>
-                      <View
-                        style={{
-                          width: 40,
-                          height: 40,
-                          borderRadius: 10,
-                          backgroundColor: theme.colors.accent + '18',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          marginRight: 12,
-                        }}
-                      >
-                        <Ionicons name="receipt" size={18} color={theme.colors.accent} />
-                      </View>
-                      <View style={{ flex: 1 }}>
-                        <Text
-                          style={{
-                            color: theme.colors.text,
-                            fontSize: 15,
-                            fontWeight: selectedReceiptType === 'diterima' ? '700' : '500',
-                          }}
-                        >
-                          {t.transactions.receiptServiceReceived}
-                        </Text>
-                        <Text style={{ color: theme.colors.textMuted, fontSize: 11, marginTop: 2 }}>
-                          {t.transactions.receiptServiceReceivedDesc}
-                        </Text>
-                      </View>
+                /* Pending: hanya Service Diterima */
+                <Card
+                  onPress={() => {
+                    setSelectedReceiptType('diterima');
+                    setReceiptPickerOpen(false);
+                    router.push(`/receipt?id=${tx.id}&type=diterima` as any);
+                  }}
+                  style={{ borderColor: theme.colors.accent + '40', borderWidth: 1.5 }}
+                  padding="sm"
+                >
+                  <View style={{ flexDirection: 'row', alignItems: 'center', width: '100%' }}>
+                    <View style={{ width: 40, height: 40, borderRadius: 10, backgroundColor: theme.colors.accent + '18', alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
+                      <Ionicons name="receipt" size={18} color={theme.colors.accent} />
                     </View>
-                  </Card>
-                  <Card
-                    onPress={() => {
-                      setSelectedReceiptType('tagihan');
-                      setReceiptPickerOpen(false);
-                      router.push(`/receipt?id=${tx.id}&type=tagihan` as any);
-                    }}
-                    style={{
-                      borderColor: selectedReceiptType === 'tagihan' ? theme.colors.accent + '40' : theme.colors.border,
-                      borderWidth: selectedReceiptType === 'tagihan' ? 1.5 : 1,
-                    }}
-                    padding="sm"
-                  >
-                    <View style={{ flexDirection: 'row', alignItems: 'center', width: '100%' }}>
-                      <View
-                        style={{
-                          width: 40,
-                          height: 40,
-                          borderRadius: 10,
-                          backgroundColor: theme.colors.success + '18',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          marginRight: 12,
-                        }}
-                      >
-                        <Ionicons name="cash" size={18} color={theme.colors.success} />
-                      </View>
-                      <View style={{ flex: 1 }}>
-                        <Text
-                          style={{
-                            color: theme.colors.text,
-                            fontSize: 15,
-                            fontWeight: selectedReceiptType === 'tagihan' ? '700' : '500',
-                          }}
-                        >
-                          {t.transactions.receiptInvoice}
-                        </Text>
-                        <Text style={{ color: theme.colors.textMuted, fontSize: 11, marginTop: 2 }}>
-                          {t.transactions.receiptInvoiceDesc}
-                        </Text>
-                      </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ color: theme.colors.text, fontSize: 15, fontWeight: '700' }}>
+                        {t.transactions.receiptServiceReceived}
+                      </Text>
+                      <Text style={{ color: theme.colors.textMuted, fontSize: 11, marginTop: 2 }}>
+                        {t.transactions.receiptServiceReceivedDesc}
+                      </Text>
                     </View>
-                  </Card>
-                </>
+                  </View>
+                </Card>
+              ) : tx.status === 'in_progress' || tx.status === 'waiting_payment' ? (
+                /* In Progress / Waiting Payment: hanya Tagihan */
+                <Card
+                  onPress={() => {
+                    setSelectedReceiptType('tagihan');
+                    setReceiptPickerOpen(false);
+                    router.push(`/receipt?id=${tx.id}&type=tagihan` as any);
+                  }}
+                  style={{ borderColor: theme.colors.success + '40', borderWidth: 1.5 }}
+                  padding="sm"
+                >
+                  <View style={{ flexDirection: 'row', alignItems: 'center', width: '100%' }}>
+                    <View style={{ width: 40, height: 40, borderRadius: 10, backgroundColor: theme.colors.success + '18', alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
+                      <Ionicons name="cash" size={18} color={theme.colors.success} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ color: theme.colors.text, fontSize: 15, fontWeight: '700' }}>
+                        {t.transactions.receiptInvoice}
+                      </Text>
+                      <Text style={{ color: theme.colors.textMuted, fontSize: 11, marginTop: 2 }}>
+                        {t.transactions.receiptInvoiceDesc}
+                      </Text>
+                    </View>
+                  </View>
+                </Card>
               ) : (
                 <Card
                   onPress={() => {
@@ -1271,14 +1814,10 @@ export default function TransactionDetail() {
       </Modal>
 
       {/* Confirm Mark Paid Modal */}
-      <Modal
-        visible={confirmPaidModal}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setConfirmPaidModal(false)}
-      >
+      {confirmPaidModal && (
+        <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}>
         <KeyboardAvoidingView
-          behavior="padding"
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={{ flex: 1 }}
         >
           <Pressable
@@ -1314,7 +1853,7 @@ export default function TransactionDetail() {
               </Text>
 
               <ScrollView
-                style={{ maxHeight: 320 }}
+                style={{ flex: 1 }}
                 keyboardShouldPersistTaps="handled"
                 showsVerticalScrollIndicator={false}
               >
@@ -1358,7 +1897,7 @@ export default function TransactionDetail() {
                       style={{
                         flexDirection: 'row',
                         justifyContent: 'space-between',
-                        alignItems: 'center',
+                        alignItems: 'flex-start',
                         paddingVertical: 8,
                         borderBottomWidth: i === tx.spareparts!.length - 1 ? 0 : 1,
                         borderBottomColor: theme.colors.divider,
@@ -1374,9 +1913,14 @@ export default function TransactionDetail() {
                         <Text style={{ color: theme.colors.textMuted, fontSize: 11 }}>
                           {formatCurrency(p.sell_price)} × {p.quantity}
                         </Text>
+                        {(p.discount_per_item ?? 0) > 0 && (
+                          <Text style={{ color: theme.colors.danger, fontSize: 11 }}>
+                            Diskon -{formatCurrency(p.discount_per_item!)} /item = -{formatCurrency(p.discount_per_item! * p.quantity)}
+                          </Text>
+                        )}
                       </View>
-                      <Text style={{ color: theme.colors.text, fontSize: 13, fontWeight: '700' }}>
-                        {formatCurrency(p.sell_price * p.quantity)}
+                      <Text style={{ color: theme.colors.accent, fontSize: 13, fontWeight: '700', marginLeft: 8 }}>
+                        {formatCurrency((p.sell_price - (p.discount_per_item ?? 0)) * p.quantity)}
                       </Text>
                     </View>
                   ))}
@@ -1390,8 +1934,51 @@ export default function TransactionDetail() {
                     gap: 8,
                   }}
                 >
-                  <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                    <Text style={{ color: theme.colors.textSecondary, fontSize: 13 }}>{t.transactions.total}</Text>
+                  {(() => {
+                    const sps = tx.spareparts ?? [];
+                    const grossSp = sps.reduce((s, p) => s + p.sell_price * p.quantity, 0);
+                    const itemDisc = sps.reduce((s, p) => s + (p.discount_per_item ?? 0) * p.quantity, 0);
+                    const custDisc = tx.custom_discount ?? 0;
+                    const hasDisc = itemDisc > 0 || custDisc > 0;
+                    return (
+                      <>
+                        {tx.total_service > 0 && (
+                          <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                            <Text style={{ color: theme.colors.textSecondary, fontSize: 13 }}>Total Jasa</Text>
+                            <Text style={{ color: theme.colors.text, fontSize: 13 }}>
+                              {formatCurrency(tx.total_service)}
+                            </Text>
+                          </View>
+                        )}
+                        {sps.length > 0 && (
+                          <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                            <Text style={{ color: theme.colors.textSecondary, fontSize: 13 }}>Total Sparepart</Text>
+                            <Text style={{ color: theme.colors.text, fontSize: 13 }}>
+                              {formatCurrency(hasDisc ? grossSp : tx.total_sparepart)}
+                            </Text>
+                          </View>
+                        )}
+                        {itemDisc > 0 && (
+                          <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                            <Text style={{ color: theme.colors.danger, fontSize: 13 }}>Diskon Item</Text>
+                            <Text style={{ color: theme.colors.danger, fontSize: 13, fontWeight: '700' }}>
+                              -{formatCurrency(itemDisc)}
+                            </Text>
+                          </View>
+                        )}
+                        {custDisc > 0 && (
+                          <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                            <Text style={{ color: theme.colors.danger, fontSize: 13 }}>Diskon Custom</Text>
+                            <Text style={{ color: theme.colors.danger, fontSize: 13, fontWeight: '700' }}>
+                              -{formatCurrency(custDisc)}
+                            </Text>
+                          </View>
+                        )}
+                      </>
+                    );
+                  })()}
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', borderTopWidth: 1, borderTopColor: theme.colors.divider, paddingTop: 8 }}>
+                    <Text style={{ color: theme.colors.textSecondary, fontSize: 13, fontWeight: '700' }}>{t.transactions.total}</Text>
                     <Text style={{ color: theme.colors.text, fontSize: 14, fontWeight: '700' }}>
                       {formatCurrency(tx.total_amount)}
                     </Text>
@@ -1481,6 +2068,126 @@ export default function TransactionDetail() {
             </Pressable>
           </Pressable>
         </KeyboardAvoidingView>
+        </View>
+      )}
+
+      {/* Edit Staff Modal */}
+      <Modal
+        visible={editStaffOpen}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setEditStaffOpen(false)}
+      >
+        <Pressable
+          onPress={() => setEditStaffOpen(false)}
+          style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' }}
+        >
+          <Pressable
+            onPress={(e) => e.stopPropagation()}
+            style={{
+              backgroundColor: theme.colors.surface,
+              borderTopLeftRadius: theme.radius.xl,
+              borderTopRightRadius: theme.radius.xl,
+              paddingTop: 8,
+              paddingBottom: Math.max(24, insets.bottom + 16),
+              maxHeight: '80%',
+            }}
+          >
+            <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: theme.colors.borderLight, alignSelf: 'center', marginBottom: 12 }} />
+            <View style={{ paddingHorizontal: 20, paddingBottom: 12 }}>
+              <Text style={{ color: theme.colors.text, fontSize: 18, fontWeight: '800' }}>
+                {t.transactions.sectionStaff}
+              </Text>
+            </View>
+            <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 8 }}>
+              {/* Mekanik */}
+              {tx.type !== 'retail' && (
+                <>
+                  <Text style={{ color: theme.colors.textSecondary, fontSize: 11, fontWeight: '700', letterSpacing: 0.5, marginBottom: 8 }}>
+                    {t.transactions.mechanic.toUpperCase()}
+                  </Text>
+                  {mechanics.length === 0 ? (
+                    <Text style={{ color: theme.colors.textMuted, fontSize: 13, marginBottom: 12 }}>
+                      Belum ada mekanik aktif
+                    </Text>
+                  ) : (
+                    mechanics.map((m) => (
+                      <Pressable
+                        key={m.id}
+                        onPress={() => { setTempMechanicId(m.id); setTempMechanicName(m.name); }}
+                        style={({ pressed }) => ({
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          padding: 12,
+                          marginBottom: 8,
+                          borderRadius: theme.radius.lg,
+                          backgroundColor: tempMechanicId === m.id ? theme.colors.accent + '18' : theme.colors.card,
+                          borderWidth: 1.5,
+                          borderColor: tempMechanicId === m.id ? theme.colors.accent : theme.colors.border,
+                          opacity: pressed ? 0.8 : 1,
+                        })}
+                      >
+                        <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: theme.colors.accent + '20', alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
+                          <Ionicons name="construct" size={16} color={theme.colors.accent} />
+                        </View>
+                        <Text style={{ flex: 1, color: theme.colors.text, fontSize: 14, fontWeight: '600' }}>{m.name}</Text>
+                        {tempMechanicId === m.id && (
+                          <Ionicons name="checkmark-circle" size={20} color={theme.colors.accent} />
+                        )}
+                      </Pressable>
+                    ))
+                  )}
+                  <View style={{ height: 12 }} />
+                </>
+              )}
+
+              {/* Kasir */}
+              <Text style={{ color: theme.colors.textSecondary, fontSize: 11, fontWeight: '700', letterSpacing: 0.5, marginBottom: 8 }}>
+                {t.transactions.cashier.toUpperCase()}
+              </Text>
+              {cashiers.length === 0 ? (
+                <Text style={{ color: theme.colors.textMuted, fontSize: 13, marginBottom: 12 }}>
+                  Belum ada kasir aktif
+                </Text>
+              ) : (
+                cashiers.map((c) => (
+                  <Pressable
+                    key={c.id}
+                    onPress={() => { setTempCashierId(c.id); setTempCashierName(c.name); }}
+                    style={({ pressed }) => ({
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      padding: 12,
+                      marginBottom: 8,
+                      borderRadius: theme.radius.lg,
+                      backgroundColor: tempCashierId === c.id ? theme.colors.success + '18' : theme.colors.card,
+                      borderWidth: 1.5,
+                      borderColor: tempCashierId === c.id ? theme.colors.success : theme.colors.border,
+                      opacity: pressed ? 0.8 : 1,
+                    })}
+                  >
+                    <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: theme.colors.success + '20', alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
+                      <Ionicons name="person" size={16} color={theme.colors.success} />
+                    </View>
+                    <Text style={{ flex: 1, color: theme.colors.text, fontSize: 14, fontWeight: '600' }}>{c.name}</Text>
+                    {tempCashierId === c.id && (
+                      <Ionicons name="checkmark-circle" size={20} color={theme.colors.success} />
+                    )}
+                  </Pressable>
+                ))
+              )}
+            </ScrollView>
+            <View style={{ paddingHorizontal: 16, paddingTop: 8 }}>
+              <Button
+                title={t.common.save}
+                onPress={saveStaff}
+                loading={savingStaff}
+                fullWidth
+                size="lg"
+              />
+            </View>
+          </Pressable>
+        </Pressable>
       </Modal>
     </View>
   );

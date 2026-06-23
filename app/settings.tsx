@@ -1,7 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Platform, Pressable, ScrollView, Text, View, PermissionsAndroid } from 'react-native';
+import { ActivityIndicator, PermissionsAndroid, Platform, Pressable, ScrollView, Text, View } from 'react-native';
+import { InterstitialAd } from '../src/components/ui/AdBanner';
 import { Button } from '../src/components/ui/Button';
 import { Card } from '../src/components/ui/Card';
 import { ConfirmDialog } from '../src/components/ui/ConfirmDialog';
@@ -10,10 +11,9 @@ import { Picker } from '../src/components/ui/Picker';
 import { ScreenHeader } from '../src/components/ui/ScreenHeader';
 import { useTheme } from '../src/contexts/ThemeContext';
 import { clearDatabase, resetDatabase } from '../src/database/db';
+import { useTranslation } from '../src/i18n';
 import { backupService } from '../src/services/backupService';
 import { useAppStore } from '../src/store/useAppStore';
-import { InterstitialAd } from '../src/components/ui/AdBanner';
-import { useTranslation } from '../src/i18n';
 
 let BLEPrinter: any = null;
 if (Platform.OS !== 'web') {
@@ -226,47 +226,120 @@ export default function SettingsScreen() {
             <Ionicons name="chevron-forward" size={18} color={theme.colors.textMuted} />
           </Pressable>
 
-          {/* Language toggle */}
-          <View
-            style={{
+          <Pressable
+            onPress={() => router.push('/service-reminders')}
+            style={({ pressed }) => ({
               flexDirection: 'row',
               alignItems: 'center',
               gap: 14,
               padding: 12,
+              borderRadius: theme.radius.md,
+              opacity: pressed ? 0.7 : 1,
               borderTopWidth: 1,
               borderTopColor: theme.colors.border,
-            }}
+            })}
           >
             <View
               style={{
                 width: 40,
                 height: 40,
                 borderRadius: 20,
-                backgroundColor: theme.colors.blue + '25',
+                backgroundColor: theme.colors.warning + '25',
                 alignItems: 'center',
                 justifyContent: 'center',
               }}
             >
-              <Ionicons name="language" size={20} color={theme.colors.blue} />
+              <Ionicons name="notifications" size={20} color={theme.colors.warning} />
             </View>
             <View style={{ flex: 1 }}>
               <Text style={{ color: theme.colors.text, fontWeight: '700', fontSize: 15 }}>
-                {t.settings.language}
+                {t.settings.manageServiceReminders}
               </Text>
               <Text style={{ color: theme.colors.textMuted, fontSize: 12, marginTop: 2 }}>
-                {t.settings.languageDesc}
+                {t.settings.manageServiceRemindersDesc}
               </Text>
             </View>
-            <View style={{ flexDirection: 'row', gap: 6 }}>
+            <Ionicons name="chevron-forward" size={18} color={theme.colors.textMuted} />
+          </Pressable>
+
+          <Pressable
+            onPress={() => router.push('/purchase-orders')}
+            style={({ pressed }) => ({
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 14,
+              padding: 12,
+              borderRadius: theme.radius.md,
+              opacity: pressed ? 0.7 : 1,
+              borderTopWidth: 1,
+              borderTopColor: theme.colors.border,
+            })}
+          >
+            <View
+              style={{
+                width: 40,
+                height: 40,
+                borderRadius: 20,
+                backgroundColor: theme.colors.info + '25',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <Ionicons name="cart" size={20} color={theme.colors.info} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={{ color: theme.colors.text, fontWeight: '700', fontSize: 15 }}>
+                {t.settings.managePurchaseOrders}
+              </Text>
+              <Text style={{ color: theme.colors.textMuted, fontSize: 12, marginTop: 2 }}>
+                {t.settings.managePurchaseOrdersDesc}
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={theme.colors.textMuted} />
+          </Pressable>
+
+          {/* Language toggle */}
+          <View
+            style={{
+              padding: 12,
+              borderTopWidth: 1,
+              borderTopColor: theme.colors.border,
+            }}
+          >
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14, marginBottom: 10 }}>
+              <View
+                style={{
+                  width: 40,
+                  height: 40,
+                  borderRadius: 20,
+                  backgroundColor: theme.colors.blue + '25',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <Ionicons name="language" size={20} color={theme.colors.blue} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={{ color: theme.colors.text, fontWeight: '700', fontSize: 15 }}>
+                  {t.settings.language}
+                </Text>
+                <Text style={{ color: theme.colors.textMuted, fontSize: 12, marginTop: 2 }}>
+                  {t.settings.languageDesc}
+                </Text>
+              </View>
+            </View>
+            <View style={{ flexDirection: 'row', gap: 8 }}>
               <Pressable
                 onPress={() => setLanguage('id')}
                 style={{
+                  flex: 1,
                   paddingHorizontal: 12,
-                  paddingVertical: 6,
+                  paddingVertical: 10,
                   borderRadius: theme.radius.md,
                   backgroundColor: language === 'id' ? theme.colors.blue : theme.colors.cardLight,
                   borderWidth: 1,
                   borderColor: language === 'id' ? theme.colors.blue : theme.colors.border,
+                  alignItems: 'center',
                 }}
               >
                 <Text style={{ color: language === 'id' ? '#fff' : theme.colors.textSecondary, fontSize: 13, fontWeight: '600' }}>
@@ -276,12 +349,14 @@ export default function SettingsScreen() {
               <Pressable
                 onPress={() => setLanguage('en')}
                 style={{
+                  flex: 1,
                   paddingHorizontal: 12,
-                  paddingVertical: 6,
+                  paddingVertical: 10,
                   borderRadius: theme.radius.md,
                   backgroundColor: language === 'en' ? theme.colors.blue : theme.colors.cardLight,
                   borderWidth: 1,
                   borderColor: language === 'en' ? theme.colors.blue : theme.colors.border,
+                  alignItems: 'center',
                 }}
               >
                 <Text style={{ color: language === 'en' ? '#fff' : theme.colors.textSecondary, fontSize: 13, fontWeight: '600' }}>
@@ -486,7 +561,7 @@ export default function SettingsScreen() {
             MyGarage Lite
           </Text>
           <Text style={{ color: theme.colors.textSecondary, fontSize: 13, marginTop: 4 }}>
-            Versi 1.0.0
+            Versi 1.1.0
           </Text>
           <Text style={{ color: theme.colors.textMuted, fontSize: 12, marginTop: 8, lineHeight: 18 }}>
             {t.settings.appDescription} {t.settings.appTarget}

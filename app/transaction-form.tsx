@@ -1,16 +1,20 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-    Alert,
-    FlatList,
-    KeyboardAvoidingView,
-    Modal,
-    Platform,
-    Pressable,
-    ScrollView,
-    Text,
-    View
+  Alert,
+  Animated,
+  FlatList,
+  Keyboard,
+  KeyboardAvoidingView,
+  Modal,
+  PanResponder,
+  Platform,
+  Pressable,
+  ScrollView,
+  Text,
+  TextInput,
+  View
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button } from '../src/components/ui/Button';
@@ -22,21 +26,21 @@ import { SearchBar } from '../src/components/ui/SearchBar';
 import { WhatsAppTemplateModal } from '../src/components/ui/WhatsAppTemplateModal';
 import { PAYMENT_METHODS } from '../src/constants/config';
 import { useTheme } from '../src/contexts/ThemeContext';
+import { useTranslation } from '../src/i18n';
 import { customerService } from '../src/services/customerService';
 import { employeeService } from '../src/services/employeeService';
 import { receiptService } from '../src/services/receiptService';
 import { serviceService } from '../src/services/serviceService';
 import { sparepartService } from '../src/services/sparepartService';
-import { useTranslation } from '../src/i18n';
 import { useAppStore } from '../src/store/useAppStore';
 import { useTransactionStore } from '../src/store/useTransactionStore';
 import {
-    Customer,
-    Employee,
-    PaymentMethod,
-    Sparepart,
-    Transaction,
-    TransactionType,
+  Customer,
+  Employee,
+  PaymentMethod,
+  Sparepart,
+  Transaction,
+  TransactionType,
 } from '../src/types';
 import { formatCurrency, parseCurrency } from '../src/utils/currency';
 import { handleReceiptPrintError } from '../src/utils/printerAlert';
@@ -50,6 +54,8 @@ interface SparepartLine {
   sparepart_name: string;
   quantity: number;
   sell_price: number;
+  buy_price: number;
+  discount_per_item: number;
   max_stock?: number;
 }
 
@@ -60,6 +66,10 @@ export default function TransactionForm() {
   const { theme } = useTheme();
   const t = useTranslation();
   const showToast = useAppStore((s) => s.showToast);
+  const lastMechanicId = useAppStore((s) => s.lastMechanicId);
+  const lastCashierId = useAppStore((s) => s.lastCashierId);
+  const setLastMechanicId = useAppStore((s) => s.setLastMechanicId);
+  const setLastCashierId = useAppStore((s) => s.setLastCashierId);
   const { add } = useTransactionStore();
 
   const sectionTitle = {
@@ -67,15 +77,6 @@ export default function TransactionForm() {
     fontSize: 14,
     fontWeight: '700' as const,
     marginBottom: 6,
-  };
-
-  const qtyBtn = {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    backgroundColor: theme.colors.primary,
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
   };
 
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -96,6 +97,12 @@ export default function TransactionForm() {
   const [actionBusy, setActionBusy] = useState<'print' | 'wa' | null>(null);
   const [waModalOpen, setWaModalOpen] = useState(false);
   const [confirmModalOpen, setConfirmModalOpen] = useState(false);
+  const [qtyDiscountModal, setQtyDiscountModal] = useState<Sparepart | null>(null);
+  const [modalQtyStr, setModalQtyStr] = useState('1');
+  const [modalDiscountStr, setModalDiscountStr] = useState('0');
+  const [customDiscount, setCustomDiscount] = useState(0);
+  const [customDiscountStr, setCustomDiscountStr] = useState('');
+  const [customDiscountWarning, setCustomDiscountWarning] = useState(false);
 
   const isRetail = transactionType === 'retail';
 
@@ -125,6 +132,37 @@ export default function TransactionForm() {
   const [customSpCategory, setCustomSpCategory] = useState('');
   const [showCategoryPicker, setShowCategoryPicker] = useState(false);
   const [newCategory, setNewCategory] = useState('');
+  const [categorySearch, setCategorySearch] = useState('');
+  const [showCategoryInput, setShowCategoryInput] = useState(false);
+
+  const scrollViewRef = useRef<ScrollView>(null);
+  const [kbHeight, setKbHeight] = useState(0);
+
+  useEffect(() => {
+    const showEvt = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvt = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const show = Keyboard.addListener(showEvt, (e) => setKbHeight(e.endCoordinates?.height ?? 0));
+    const hide = Keyboard.addListener(hideEvt, () => setKbHeight(0));
+    return () => { show.remove(); hide.remove(); };
+  }, []);
+
+  const customerSheetY = useRef(new Animated.Value(0)).current;
+  const customerPanResponder = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_, g) => g.dy > 5 && g.dy > Math.abs(g.dx),
+      onPanResponderMove: (_, g) => {
+        if (g.dy > 0) customerSheetY.setValue(g.dy);
+      },
+      onPanResponderRelease: (_, g) => {
+        if (g.dy > 80 || g.vy > 0.5) {
+          customerSheetY.setValue(0);
+          setCustomerPickerOpen(false);
+        } else {
+          Animated.spring(customerSheetY, { toValue: 0, useNativeDriver: true }).start();
+        }
+      },
+    })
+  ).current;
 
   useFocusEffect(
     useCallback(() => {
@@ -138,8 +176,20 @@ export default function TransactionForm() {
         }
       });
       sparepartService.getAll().then(setSpareparts);
-      employeeService.getMechanics().then(setMechanics);
-      employeeService.getCashiers().then(setCashiers);
+      employeeService.getMechanics().then((data) => {
+        setMechanics(data);
+        const { lastMechanicId: lastM } = useAppStore.getState();
+        if (lastM && data.some((m) => m.id === lastM)) {
+          setSelectedMechanicId((prev) => prev ?? lastM);
+        }
+      });
+      employeeService.getCashiers().then((data) => {
+        setCashiers(data);
+        const { lastCashierId: lastC } = useAppStore.getState();
+        if (lastC && data.some((c) => c.id === lastC)) {
+          setSelectedCashierId((prev) => prev ?? lastC);
+        }
+      });
     }, [])
   );
 
@@ -154,8 +204,12 @@ export default function TransactionForm() {
   const selectedMechanic = mechanics.find((m) => m.id === selectedMechanicId) ?? null;
 
   const totalService = services.reduce((s, x) => s + x.price, 0);
-  const totalSparepart = parts.reduce((s, x) => s + x.sell_price * x.quantity, 0);
-  const grandTotal = totalService + totalSparepart;
+  const totalBeforeDiscount = parts.reduce((s, x) => s + x.sell_price * x.quantity, 0);
+  const totalDiscount = parts.reduce((s, x) => s + x.discount_per_item * x.quantity, 0);
+  const totalSparepart = totalBeforeDiscount - totalDiscount;
+  const totalBuyCost = parts.reduce((s, x) => s + (x.buy_price ?? 0) * x.quantity, 0);
+  const totalMargin = totalSparepart - totalBuyCost;
+  const grandTotal = totalService + totalSparepart - customDiscount;
 
   const filteredCustomers = customers.filter((c) => {
     const q = customerSearch.toLowerCase();
@@ -175,6 +229,19 @@ export default function TransactionForm() {
     return uniqueCategories.sort();
   }, [spareparts]);
 
+  const filteredCategories = useMemo(() => {
+    if (!categorySearch.trim()) return categories;
+    const q = categorySearch.toLowerCase();
+    return categories.filter((c) => c.toLowerCase().includes(q));
+  }, [categories, categorySearch]);
+
+  useEffect(() => {
+    if (!showCategoryPicker) {
+      setCategorySearch('');
+      setShowCategoryInput(false);
+    }
+  }, [showCategoryPicker]);
+
   const submitCustomSparepart = async () => {
     if (!customSpName.trim() || !customSpBuyPrice.trim() || !customSpSellPrice.trim() || !customSpStock.trim()) {
       Alert.alert('Peringatan', 'Mohon lengkapi semua data');
@@ -191,8 +258,8 @@ export default function TransactionForm() {
         stock: stockVal,
         min_stock: minStockVal,
       });
-      // Add to transaction
-      addSparepart(newSp);
+      // Add to transaction via modal
+      openQtyDiscountModal(newSp);
       // Refresh spareparts list
       sparepartService.getAll().then(setSpareparts);
       // Reset form
@@ -233,52 +300,68 @@ export default function TransactionForm() {
 
   const removeService = (i: number) => setServices((p) => p.filter((_, idx) => idx !== i));
 
-  const addSparepart = (sp: Sparepart) => {
+  const openQtyDiscountModal = (sp: Sparepart) => {
+    if (sp.stock < 1) {
+      showToast('Stok tidak mencukupi', 'error');
+      return;
+    }
+    setQtyDiscountModal(sp);
+    setModalQtyStr('1');
+    setModalDiscountStr('0');
+    setSparepartPickerOpen(false);
+  };
+
+  const confirmAddSparepart = () => {
+    if (!qtyDiscountModal) return;
+    const sp = qtyDiscountModal;
+    const qty = Math.max(1, parseInt(modalQtyStr, 10) || 1);
+    const disc = Math.max(0, parseInt(modalDiscountStr, 10) || 0);
+    if (qty > sp.stock) {
+      showToast('Stok tidak mencukupi', 'error');
+      return;
+    }
     const exists = parts.find((p) => p.sparepart_id === sp.id);
     if (exists) {
-      const newQty = exists.quantity + 1;
-      if (newQty > sp.stock) {
-        showToast('Stok tidak mencukupi', 'error');
-        return;
-      }
       setParts((prev) =>
         prev.map((p) =>
-          p.sparepart_id === sp.id ? { ...p, quantity: newQty } : p
+          p.sparepart_id === sp.id
+            ? { ...p, quantity: p.quantity + qty, discount_per_item: disc }
+            : p
         )
       );
     } else {
-      if (sp.stock < 1) {
-        showToast('Stok tidak mencukupi', 'error');
-        return;
-      }
       setParts((prev) => [
         ...prev,
         {
           sparepart_id: sp.id,
           sparepart_name: sp.name,
-          quantity: 1,
+          quantity: qty,
           sell_price: sp.sell_price,
+          buy_price: sp.buy_price ?? 0,
+          discount_per_item: disc,
           max_stock: sp.stock,
         },
       ]);
     }
-    setSparepartPickerOpen(false);
+    setQtyDiscountModal(null);
   };
 
-  const updatePartQty = (i: number, delta: number) => {
-    const part = parts[i];
-    if (!part) return;
-    const next = Math.max(1, part.quantity + delta);
-    if (next > (part.max_stock || 0)) {
-      showToast('Stok tidak mencukupi', 'error');
-      return;
-    }
-    setParts((prev) =>
-      prev.map((p, idx) => (idx === i ? { ...p, quantity: next } : p))
-    );
+  const removePart = (i: number) => {
+    setParts((prev) => {
+      const newParts = prev.filter((_, idx) => idx !== i);
+      const newBuyCost = newParts.reduce((s, x) => s + (x.buy_price ?? 0) * x.quantity, 0);
+      const newBeforeDisc = newParts.reduce((s, x) => s + x.sell_price * x.quantity, 0);
+      const newItemDisc = newParts.reduce((s, x) => s + x.discount_per_item * x.quantity, 0);
+      const newMargin = (newBeforeDisc - newItemDisc) - newBuyCost;
+      const newMax = Math.max(0, newMargin);
+      if (customDiscount > newMax) {
+        setCustomDiscount(newMax);
+        setCustomDiscountStr(newMax > 0 ? String(newMax) : '');
+      }
+      setCustomDiscountWarning(false);
+      return newParts;
+    });
   };
-
-  const removePart = (i: number) => setParts((p) => p.filter((_, idx) => idx !== i));
 
   const save = () => {
     if (!isRetail && !selectedCustomer) {
@@ -320,7 +403,7 @@ export default function TransactionForm() {
     const finalStatus = isRetail ? 'paid' : 'pending';
     const finalServices = isRetail ? [] : services;
     const finalParts = parts;
-    const total = totalService + totalSparepart;
+    const total = grandTotal;
     const isCash = paymentMethod === 'Tunai';
     const paid = isRetail ? (isCash ? parseCurrency(paidAmount) : total) : total;
     const change = isRetail && isCash ? Math.max(0, paid - total) : 0;
@@ -345,12 +428,14 @@ export default function TransactionForm() {
         change_amount: change,
         cashier_id: cashierId,
         cashier_name: finalCashierName || null,
+        custom_discount: isRetail ? customDiscount : 0,
         service_items: finalServices,
         spareparts: finalParts.map((p) => ({
           sparepart_id: p.sparepart_id,
           sparepart_name: p.sparepart_name,
           quantity: p.quantity,
           sell_price: p.sell_price,
+          discount_per_item: p.discount_per_item,
         })),
       });
       showToast(t.transactions.saved, 'success');
@@ -394,14 +479,20 @@ export default function TransactionForm() {
   };
 
   return (
-    <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
+    <View style={{ flex: 1, backgroundColor: theme.colors.surface }}>
       <ScreenHeader title={isRetail ? t.transactions.formRetail : t.transactions.formService} showBack />
-      <KeyboardAvoidingView
-        behavior="padding"
-        style={{ flex: 1 }}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top + 56 : 0}
-      >
-        <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 180 + (Platform.OS === 'android' ? 48 : 34), gap: 20 }}>
+      <View style={{ flex: 1 }}>
+        <ScrollView
+          ref={scrollViewRef}
+          style={{ flex: 1, backgroundColor: theme.colors.surface }}
+          contentContainerStyle={{
+            flexGrow: 1,
+            padding: 16,
+            paddingBottom: 20 + (kbHeight > 0 ? kbHeight : 0),
+            gap: 20,
+          }}
+          keyboardShouldPersistTaps="handled"
+        >
           {/* Transaction type toggle */}
           <View style={{ flexDirection: 'row', gap: 10, marginBottom: 4 }}>
             <Pressable
@@ -524,7 +615,7 @@ export default function TransactionForm() {
                 options={mechanics.map((m) => m.id)}
                 optionLabels={Object.fromEntries(mechanics.map((m) => [m.id, m.name]))}
                 optionIcons={Object.fromEntries(mechanics.map((m) => [m.id, 'construct']))}
-                onChange={(v) => setSelectedMechanicId(v)}
+                onChange={(v) => { setSelectedMechanicId(v); setLastMechanicId(v); }}
                 placeholder={t.transactions.selectMechanic}
               />
             </View>
@@ -539,7 +630,7 @@ export default function TransactionForm() {
                 options={cashiers.map((c) => c.id)}
                 optionLabels={Object.fromEntries(cashiers.map((c) => [c.id, c.name]))}
                 optionIcons={Object.fromEntries(cashiers.map((c) => [c.id, 'person']))}
-                onChange={(v) => setSelectedCashierId(v)}
+                onChange={(v) => { setSelectedCashierId(v); setLastCashierId(v); }}
                 placeholder={t.transactions.selectCashier}
               />
             </View>
@@ -554,7 +645,7 @@ export default function TransactionForm() {
                 options={cashiers.map((c) => c.id)}
                 optionLabels={Object.fromEntries(cashiers.map((c) => [c.id, c.name]))}
                 optionIcons={Object.fromEntries(cashiers.map((c) => [c.id, 'person']))}
-                onChange={(v) => setSelectedCashierId(v)}
+                onChange={(v) => { setSelectedCashierId(v); setLastCashierId(v); }}
                 placeholder={t.transactions.selectCashier}
               />
             </View>
@@ -571,6 +662,7 @@ export default function TransactionForm() {
                 multiline
                 numberOfLines={3}
                 style={{ minHeight: 70, textAlignVertical: 'top' }}
+                onFocus={() => setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 300)}
               />
             </View>
           )}
@@ -710,6 +802,7 @@ export default function TransactionForm() {
                     {t.transactions.noSpareparts}
                   </Text>
                 ) : (
+                  <>
                   <View style={{ gap: 0 }}>
                     {parts.map((p, i) => (
                       <View
@@ -742,34 +835,25 @@ export default function TransactionForm() {
                           <Text style={{ color: theme.colors.textMuted, fontSize: 12, marginTop: 2 }}>
                             {formatCurrency(p.sell_price)} × {p.quantity}
                           </Text>
+                          {(p.buy_price ?? 0) > 0 && (
+                            <Text style={{ color: theme.colors.warning, fontSize: 11, marginTop: 1 }}>
+                              Beli: {formatCurrency(p.buy_price ?? 0)}
+                            </Text>
+                          )}
+                          {p.discount_per_item > 0 && (
+                            <>
+                              <Text style={{ color: theme.colors.danger, fontSize: 11, marginTop: 1 }}>
+                                Diskon {formatCurrency(p.discount_per_item)} /item
+                              </Text>
+                              <Text style={{ color: theme.colors.danger, fontSize: 11, marginTop: 1, fontWeight: '600' }}>
+                                -{formatCurrency(p.discount_per_item * p.quantity)}
+                              </Text>
+                            </>
+                          )}
                         </View>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                          <Pressable
-                            onPress={() => updatePartQty(i, -1)}
-                            style={qtyBtn}
-                            hitSlop={6}
-                          >
-                            <Ionicons name="remove" size={16} color="#fff" />
-                          </Pressable>
-                          <Text
-                            style={{
-                              color: theme.colors.text,
-                              minWidth: 22,
-                              textAlign: 'center',
-                              fontWeight: '700',
-                              fontSize: 14,
-                            }}
-                          >
-                            {p.quantity}
-                          </Text>
-                          <Pressable
-                            onPress={() => updatePartQty(i, 1)}
-                            style={qtyBtn}
-                            hitSlop={6}
-                          >
-                            <Ionicons name="add" size={16} color="#fff" />
-                          </Pressable>
-                        </View>
+                        <Text style={{ color: theme.colors.accent, fontWeight: '700', fontSize: 14, marginLeft: 8 }}>
+                          {formatCurrency((p.sell_price - p.discount_per_item) * p.quantity)}
+                        </Text>
                         <Pressable
                           onPress={() => removePart(i)}
                           hitSlop={8}
@@ -789,8 +873,101 @@ export default function TransactionForm() {
                       </View>
                     ))}
                   </View>
+                  {totalDiscount > 0 && (
+                    <View style={{
+                      flexDirection: 'row',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      borderTopWidth: 1,
+                      borderTopColor: theme.colors.divider,
+                      marginTop: 8,
+                      paddingTop: 8,
+                    }}>
+                      <Text style={{ color: theme.colors.textSecondary, fontSize: 12 }}>Total Diskon Item</Text>
+                      <Text style={{ color: theme.colors.danger, fontSize: 13, fontWeight: '700' }}>
+                        -{formatCurrency(totalDiscount)}
+                      </Text>
+                    </View>
+                  )}
+                  </>
                 )}
               </Card>
+            </View>
+          )}
+
+          {/* Retail: custom discount above payment method */}
+          {isRetail && parts.length > 0 && (
+            <View style={{
+              backgroundColor: theme.colors.card,
+              borderRadius: theme.radius.lg,
+              borderWidth: 1,
+              borderColor: totalBuyCost > 0 && totalMargin <= 0
+                ? theme.colors.textMuted + '40'
+                : customDiscount > 0 ? theme.colors.danger + '60' : theme.colors.border,
+              padding: 14,
+              marginBottom: 4,
+              gap: 6,
+            }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+                <Ionicons
+                  name="pricetag"
+                  size={14}
+                  color={totalBuyCost > 0 && totalMargin <= 0 ? theme.colors.textMuted : customDiscount > 0 ? theme.colors.danger : theme.colors.textMuted}
+                />
+                <Text style={{ color: theme.colors.textSecondary, fontSize: 13, fontWeight: '600', flex: 1 }}>
+                  Diskon Custom
+                </Text>
+                {totalMargin > 0 && (
+                  <Text style={{ color: theme.colors.success, fontSize: 11, fontWeight: '600' }}>
+                    Margin tersisa: {formatCurrency(totalMargin - customDiscount)}
+                  </Text>
+                )}
+              </View>
+              {totalBuyCost > 0 && totalMargin <= 0 ? (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 8 }}>
+                  <Ionicons name="warning" size={14} color={theme.colors.warning} />
+                  <Text style={{ color: theme.colors.textMuted, fontSize: 12, flex: 1 }}>
+                    Margin sparepart sudah habis, tidak bisa diinput
+                  </Text>
+                </View>
+              ) : (
+                <>
+                  <TextInput
+                    value={customDiscountStr}
+                    onChangeText={(v) => {
+                      const clean = v.replace(/[^0-9]/g, '');
+                      const n = parseInt(clean, 10) || 0;
+                      const max = Math.max(0, totalMargin);
+                      const capped = Math.min(n, max);
+                      setCustomDiscountStr(capped === n ? clean : String(capped));
+                      setCustomDiscount(capped);
+                      setCustomDiscountWarning(n > max && max > 0);
+                    }}
+                    keyboardType="numeric"
+                    placeholder="0"
+                    placeholderTextColor={theme.colors.textMuted}
+                    style={{
+                      color: customDiscount > 0 ? theme.colors.danger : theme.colors.text,
+                      fontSize: 16,
+                      fontWeight: '700',
+                      borderWidth: 1,
+                      borderColor: customDiscountWarning ? theme.colors.warning : customDiscount > 0 ? theme.colors.danger : theme.colors.border,
+                      borderRadius: theme.radius.md,
+                      paddingHorizontal: 12,
+                      paddingVertical: 10,
+                      backgroundColor: theme.colors.surface,
+                    }}
+                  />
+                  {customDiscountWarning && (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                      <Ionicons name="alert-circle" size={12} color={theme.colors.warning} />
+                      <Text style={{ color: theme.colors.warning, fontSize: 11 }}>
+                        Diskon tidak boleh melebihi total margin
+                      </Text>
+                    </View>
+                  )}
+                </>
+              )}
             </View>
           )}
 
@@ -812,6 +989,39 @@ export default function TransactionForm() {
               {paymentMethod === 'Tunai' && (
                 <View style={{ marginBottom: 6 }}>
                   <Text style={sectionTitle}>{t.transactions.payAmount}</Text>
+                  {/* Preset cash denomination buttons */}
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={{ flexDirection: 'row', gap: 8, marginBottom: 10 }}
+                  >
+                    {[10000, 20000, 50000, 100000].map((amount) => {
+                      const isActive = parseCurrency(paidAmount) === amount;
+                      return (
+                        <Pressable
+                          key={amount}
+                          onPress={() => setPaidAmount(String(amount))}
+                          style={({ pressed }) => ({
+                            paddingHorizontal: 14,
+                            paddingVertical: 8,
+                            borderRadius: theme.radius.md,
+                            backgroundColor: isActive ? theme.colors.accent + '20' : theme.colors.card,
+                            borderWidth: 1.5,
+                            borderColor: isActive ? theme.colors.accent : theme.colors.border,
+                            opacity: pressed ? 0.7 : 1,
+                          })}
+                        >
+                          <Text style={{
+                            color: isActive ? theme.colors.accent : theme.colors.text,
+                            fontSize: 13,
+                            fontWeight: '700',
+                          }}>
+                            {formatCurrency(amount)}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </ScrollView>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
                     <View
                       style={{
@@ -828,6 +1038,7 @@ export default function TransactionForm() {
                         placeholder={t.transactions.payPlaceholder}
                         keyboardType="numeric"
                         containerStyle={{ marginBottom: 0 }}
+                        onFocus={() => setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 300)}
                       />
                     </View>
                     {paidAmount ? (
@@ -854,44 +1065,65 @@ export default function TransactionForm() {
               )}
             </>
           )}
+
         </ScrollView>
 
-        {/* Footer Total + Save */}
+        {/* Footer Total + Save — fixed menempel di bawah layar */}
         <View
           style={{
-            position: 'absolute',
-            left: 0,
-            right: 0,
-            bottom: 0,
             backgroundColor: theme.colors.surface,
-            padding: 16,
-            paddingBottom: Math.max(16, insets.bottom + 16),
+            paddingTop: 12,
+            paddingHorizontal: 16,
+            paddingBottom: kbHeight > 0 ? 12 : Math.max(16, insets.bottom + 16),
             borderTopWidth: 1,
             borderTopColor: theme.colors.divider,
           }}
         >
-          <View
-            style={{
-              flexDirection: 'row',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              paddingTop: 16,
-            }}
-          >
-            <Text style={{ color: theme.colors.text, fontSize: 16, fontWeight: '700' }}>
-              Total
-            </Text>
-            <Text style={{ color: theme.colors.accent, fontSize: 22, fontWeight: '800' }}>
-              {formatCurrency(grandTotal)}
-            </Text>
-          </View>
+          {isRetail && parts.length > 0 && (
+            <View style={{ marginBottom: 12, gap: 4 }}>
+              {/* Total Harga */}
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                <Text style={{ color: theme.colors.textSecondary, fontSize: 13 }}>Total Harga</Text>
+                <Text style={{ color: theme.colors.textSecondary, fontSize: 13 }}>
+                  {formatCurrency(totalBeforeDiscount)}
+                </Text>
+              </View>
+              {/* Total Diskon */}
+              {(totalDiscount + customDiscount) > 0 && (
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                  <Text style={{ color: theme.colors.danger, fontSize: 13 }}>Total Diskon</Text>
+                  <Text style={{ color: theme.colors.danger, fontSize: 13, fontWeight: '700' }}>
+                    -{formatCurrency(totalDiscount + customDiscount)}
+                  </Text>
+                </View>
+              )}
+              {/* Margin yang Didapat */}
+              {totalBuyCost > 0 && (
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                    <Ionicons name="trending-up" size={12} color={theme.colors.success} />
+                    <Text style={{ color: theme.colors.textMuted, fontSize: 13 }}>Margin</Text>
+                  </View>
+                  <Text style={{ color: theme.colors.success, fontSize: 13, fontWeight: '700' }}>
+                    {formatCurrency(totalMargin - customDiscount)}
+                  </Text>
+                </View>
+              )}
+              {/* Total Bayar */}
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: 6, borderTopWidth: 1, borderTopColor: theme.colors.divider, marginTop: 2 }}>
+                <Text style={{ color: theme.colors.textSecondary, fontSize: 14, fontWeight: '600' }}>Total Bayar</Text>
+                <Text style={{ color: theme.colors.accent, fontSize: 20, fontWeight: '800' }}>
+                  {formatCurrency(grandTotal)}
+                </Text>
+              </View>
+            </View>
+          )}
           <Button
             title={isRetail ? t.transactions.savePrint : t.transactions.saveContinue}
             onPress={save}
             loading={loading}
             size="lg"
             fullWidth
-            style={{ marginTop: 16 }}
             disabled={
               (!isRetail && !canSaveService) ||
               (isRetail && parts.length === 0) ||
@@ -906,79 +1138,266 @@ export default function TransactionForm() {
             }
           />
         </View>
-      </KeyboardAvoidingView>
+      </View>
 
-      {/* Customer Picker */}
+      {/* Qty + Diskon Modal (retail sparepart picker) */}
+      <Modal
+        visible={!!qtyDiscountModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setQtyDiscountModal(null)}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={{ flex: 1 }}
+        >
+          <Pressable
+            style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', padding: 24 }}
+            onPress={() => setQtyDiscountModal(null)}
+          >
+          <Pressable onPress={(e) => e.stopPropagation()}>
+          <View style={{ backgroundColor: theme.colors.card, borderRadius: theme.radius.xl, padding: 20, borderWidth: 1, borderColor: theme.colors.border }}>
+            <Text style={{ color: theme.colors.text, fontSize: 16, fontWeight: '700', marginBottom: 4 }}>
+              {qtyDiscountModal?.name}
+            </Text>
+            <View style={{ flexDirection: 'row', gap: 12, marginBottom: 16 }}>
+              <View style={{ flex: 1, backgroundColor: theme.colors.cardLight, borderRadius: theme.radius.md, padding: 8 }}>
+                <Text style={{ color: theme.colors.textMuted, fontSize: 10, marginBottom: 2 }}>HARGA JUAL</Text>
+                <Text style={{ color: theme.colors.accent, fontSize: 14, fontWeight: '700' }}>
+                  {formatCurrency(qtyDiscountModal?.sell_price ?? 0)}
+                </Text>
+              </View>
+              <View style={{ flex: 1, backgroundColor: theme.colors.cardLight, borderRadius: theme.radius.md, padding: 8 }}>
+                <Text style={{ color: theme.colors.textMuted, fontSize: 10, marginBottom: 2 }}>HARGA BELI</Text>
+                <Text style={{ color: theme.colors.warning, fontSize: 14, fontWeight: '700' }}>
+                  {formatCurrency(qtyDiscountModal?.buy_price ?? 0)}
+                </Text>
+              </View>
+              <View style={{ backgroundColor: theme.colors.cardLight, borderRadius: theme.radius.md, padding: 8, alignItems: 'center', justifyContent: 'center', minWidth: 60 }}>
+                <Text style={{ color: theme.colors.textMuted, fontSize: 10, marginBottom: 2 }}>STOK</Text>
+                <Text style={{ color: theme.colors.text, fontSize: 14, fontWeight: '700' }}>
+                  {qtyDiscountModal?.stock}
+                </Text>
+              </View>
+            </View>
+
+            <Text style={{ color: theme.colors.textSecondary, fontSize: 13, fontWeight: '600', marginBottom: 8 }}>Jumlah</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14, marginBottom: 16 }}>
+              <Pressable
+                onPress={() => {
+                  const n = Math.max(1, (parseInt(modalQtyStr, 10) || 1) - 1);
+                  setModalQtyStr(String(n));
+                }}
+                style={({ pressed }) => ({
+                  width: 48, height: 48, borderRadius: 12,
+                  backgroundColor: theme.colors.primary,
+                  alignItems: 'center', justifyContent: 'center',
+                  opacity: pressed ? 0.7 : 1,
+                })}
+              >
+                <Ionicons name="remove" size={22} color="#fff" />
+              </Pressable>
+              <TextInput
+                value={modalQtyStr}
+                onChangeText={(v) => setModalQtyStr(v.replace(/[^0-9]/g, '') || '1')}
+                onBlur={() => {
+                  const n = parseInt(modalQtyStr, 10);
+                  setModalQtyStr(String(isNaN(n) || n < 1 ? 1 : n));
+                }}
+                keyboardType="numeric"
+                style={{
+                  flex: 1, textAlign: 'center', fontSize: 24, fontWeight: '800',
+                  color: theme.colors.text, borderWidth: 1, borderColor: theme.colors.border,
+                  borderRadius: theme.radius.md, paddingVertical: 8,
+                  backgroundColor: theme.colors.surface,
+                }}
+              />
+              <Pressable
+                onPress={() => {
+                  const cur = parseInt(modalQtyStr, 10) || 1;
+                  const max = qtyDiscountModal?.stock ?? 9999;
+                  const n = Math.min(max, cur + 1);
+                  setModalQtyStr(String(n));
+                }}
+                style={({ pressed }) => ({
+                  width: 48, height: 48, borderRadius: 12,
+                  backgroundColor: theme.colors.accent,
+                  alignItems: 'center', justifyContent: 'center',
+                  opacity: pressed ? 0.7 : 1,
+                })}
+              >
+                <Ionicons name="add" size={22} color="#fff" />
+              </Pressable>
+            </View>
+
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+              <Text style={{ color: theme.colors.textSecondary, fontSize: 13, fontWeight: '600' }}>
+                Diskon per Item (Rp)
+              </Text>
+              <Text style={{ color: theme.colors.textMuted, fontSize: 11 }}>
+                maks. margin {formatCurrency(Math.max(0, (qtyDiscountModal?.sell_price ?? 0) - (qtyDiscountModal?.buy_price ?? 0)))}
+              </Text>
+            </View>
+            <TextInput
+              value={modalDiscountStr}
+              onChangeText={(v) => {
+                const clean = v.replace(/[^0-9]/g, '');
+                const n = parseInt(clean, 10) || 0;
+                const maxDisc = Math.max(0, (qtyDiscountModal?.sell_price ?? 0) - (qtyDiscountModal?.buy_price ?? 0));
+                const capped = Math.min(n, maxDisc);
+                setModalDiscountStr(capped === n ? clean : String(capped));
+              }}
+              keyboardType="numeric"
+              placeholder="0"
+              placeholderTextColor={theme.colors.textMuted}
+              style={{
+                color: theme.colors.text, fontSize: 16,
+                borderWidth: 1, borderColor: theme.colors.border,
+                borderRadius: theme.radius.md, paddingHorizontal: 14, paddingVertical: 10,
+                backgroundColor: theme.colors.surface, marginBottom: 14,
+              }}
+            />
+
+            {(() => {
+              const qty = parseInt(modalQtyStr, 10) || 1;
+              const disc = parseInt(modalDiscountStr, 10) || 0;
+              const price = qtyDiscountModal?.sell_price ?? 0;
+              const beforeDisc = price * qty;
+              const totalDisc = disc * qty;
+              const afterDisc = beforeDisc - totalDisc;
+              return (
+                <View style={{ backgroundColor: theme.colors.cardLight, borderRadius: theme.radius.lg, padding: 12, gap: 4, marginBottom: 16 }}>
+                  {disc > 0 && (
+                    <>
+                      <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                        <Text style={{ color: theme.colors.textSecondary, fontSize: 12 }}>Total Harga</Text>
+                        <Text style={{ color: theme.colors.textSecondary, fontSize: 12 }}>{formatCurrency(beforeDisc)}</Text>
+                      </View>
+                      <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                        <Text style={{ color: theme.colors.danger, fontSize: 12 }}>Total Diskon</Text>
+                        <Text style={{ color: theme.colors.danger, fontSize: 12, fontWeight: '700' }}>-{formatCurrency(totalDisc)}</Text>
+                      </View>
+                    </>
+                  )}
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                    <Text style={{ color: theme.colors.text, fontSize: 14, fontWeight: '700' }}>Total Bayar</Text>
+                    <Text style={{ color: theme.colors.accent, fontSize: 16, fontWeight: '800' }}>{formatCurrency(afterDisc)}</Text>
+                  </View>
+                </View>
+              );
+            })()}
+
+            <View style={{ flexDirection: 'row', gap: 10 }}>
+              <Button title={t.common.cancel} variant="secondary" fullWidth onPress={() => setQtyDiscountModal(null)} />
+              <Button title="Tambah" fullWidth onPress={confirmAddSparepart} />
+            </View>
+          </View>
+          </Pressable>
+          </Pressable>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* Customer Picker - Bottom Sheet */}
       <Modal
         visible={customerPickerOpen}
+        transparent
         animationType="slide"
         onRequestClose={() => setCustomerPickerOpen(false)}
       >
-        <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
-          <ScreenHeader
-            title={t.reminders.pickCustomer}
-            showBack
-            rightElement={
-              <Pressable
-                onPress={() => {
-                  setCustomerPickerOpen(false);
-                  setTimeout(() => {
-                    router.push('/customer-form');
-                  }, 150);
-                }}
-              >
-                <Ionicons name="add-circle" size={28} color={theme.colors.accent} />
-              </Pressable>
-            }
-          />
-          <SearchBar value={customerSearch} onChangeText={setCustomerSearch} />
-          <FlatList
-            data={filteredCustomers}
-            keyExtractor={(c) => c.id}
-            contentContainerStyle={{ padding: 16, paddingBottom: 16 + insets.bottom }}
-            renderItem={({ item }) => (
-              <Pressable
-                onPress={() => {
-                  setSelectedCustomer(item);
-                  setCustomerPickerOpen(false);
-                }}
-                style={({ pressed }) => ({
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  gap: 12,
-                  paddingVertical: 12,
-                  paddingHorizontal: 16,
-                  borderRadius: theme.radius.lg,
-                  backgroundColor: pressed ? theme.colors.cardLight : theme.colors.card,
-                  marginBottom: 8,
-                })}
-              >
+        <Pressable
+          onPress={() => setCustomerPickerOpen(false)}
+          style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' }}
+        >
+          <Pressable onPress={(e) => e.stopPropagation()} style={{ height: '90%' }}>
+            <Animated.View
+              style={{
+                flex: 1,
+                backgroundColor: theme.colors.surface,
+                borderTopLeftRadius: theme.radius.xl,
+                borderTopRightRadius: theme.radius.xl,
+                paddingBottom: Math.max(28, insets.bottom + 16),
+                transform: [{ translateY: customerSheetY }],
+              }}
+            >
+              {/* Drag handle + header — pan responder di sini */}
+              <View {...customerPanResponder.panHandlers}>
                 <View
                   style={{
-                    width: 40,
-                    height: 40,
-                    borderRadius: 20,
-                    backgroundColor: theme.colors.primary + '30',
-                    alignItems: 'center',
-                    justifyContent: 'center',
+                    width: 40, height: 4, borderRadius: 2,
+                    backgroundColor: theme.colors.borderLight,
+                    alignSelf: 'center', marginTop: 10, marginBottom: 4,
                   }}
-                >
-                  <Ionicons name="person" size={18} color={theme.colors.primary} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={{ color: theme.colors.text, fontWeight: '700', fontSize: 15 }}>
-                    {item.name}
+                />
+                <View style={{
+                  flexDirection: 'row', alignItems: 'center',
+                  paddingHorizontal: 20, paddingVertical: 12,
+                  justifyContent: 'space-between',
+                }}>
+                  <Text style={{ color: theme.colors.text, fontSize: 18, fontWeight: '800' }}>
+                    {t.reminders.pickCustomer}
                   </Text>
-                  <Text
-                    style={{ color: theme.colors.textSecondary, fontSize: 12, marginTop: 2 }}
+                  <Pressable
+                    onPress={() => {
+                      setCustomerPickerOpen(false);
+                      setTimeout(() => router.push('/customer-form'), 300);
+                    }}
                   >
-                    {item.plate_number} • {item.vehicle_brand}
-                  </Text>
+                    <Ionicons name="add-circle" size={28} color={theme.colors.accent} />
+                  </Pressable>
                 </View>
-              </Pressable>
-            )}
-          />
-        </View>
+              </View>
+
+              <SearchBar
+                value={customerSearch}
+                onChangeText={setCustomerSearch}
+                containerStyle={{ marginHorizontal: 16, marginBottom: 8 }}
+              />
+
+              <FlatList
+                data={filteredCustomers}
+                keyExtractor={(c) => c.id}
+                keyboardShouldPersistTaps="handled"
+                contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 16 }}
+                renderItem={({ item }) => (
+                  <Pressable
+                    onPress={() => {
+                      setSelectedCustomer(item);
+                      setCustomerPickerOpen(false);
+                    }}
+                    style={({ pressed }) => ({
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      gap: 12,
+                      paddingVertical: 12,
+                      paddingHorizontal: 16,
+                      borderRadius: theme.radius.lg,
+                      backgroundColor: pressed ? theme.colors.cardLight : theme.colors.card,
+                      marginBottom: 8,
+                    })}
+                  >
+                    <View
+                      style={{
+                        width: 40, height: 40, borderRadius: 20,
+                        backgroundColor: theme.colors.primary + '30',
+                        alignItems: 'center', justifyContent: 'center',
+                      }}
+                    >
+                      <Ionicons name="person" size={18} color={theme.colors.primary} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ color: theme.colors.text, fontWeight: '700', fontSize: 15 }}>
+                        {item.name}
+                      </Text>
+                      <Text style={{ color: theme.colors.textSecondary, fontSize: 12, marginTop: 2 }}>
+                        {item.plate_number} • {item.vehicle_brand}
+                      </Text>
+                    </View>
+                  </Pressable>
+                )}
+              />
+            </Animated.View>
+          </Pressable>
+        </Pressable>
       </Modal>
 
       {/* Service Picker */}
@@ -1153,22 +1572,169 @@ export default function TransactionForm() {
                   onChangeText={setCustomSpName}
                   placeholder={t.spareparts.name}
                 />
-                <Pressable
-                  onPress={() => setShowCategoryPicker(true)}
-                  style={{
-                    backgroundColor: theme.colors.background,
-                    borderRadius: theme.radius.md,
-                    borderWidth: 1,
-                    borderColor: theme.colors.border,
-                    paddingHorizontal: 16,
-                    paddingVertical: 12,
-                    marginBottom: 12,
-                  }}
-                >
-                  <Text style={{ color: customSpCategory ? theme.colors.text : theme.colors.textSecondary }}>
-                    {customSpCategory || t.spareparts.selectCategory}
-                  </Text>
-                </Pressable>
+                {/* Category — inline dropdown (menghindari double-Modal Android) */}
+                <View style={{ marginBottom: 8 }}>
+                  <Pressable
+                    onPress={() => {
+                      setShowCategoryPicker(!showCategoryPicker);
+                      setCategorySearch('');
+                      setShowCategoryInput(false);
+                    }}
+                    style={({ pressed }) => ({
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      backgroundColor: theme.colors.cardLight,
+                      borderRadius: showCategoryPicker ? theme.radius.md : theme.radius.md,
+                      borderBottomLeftRadius: showCategoryPicker ? 0 : theme.radius.md,
+                      borderBottomRightRadius: showCategoryPicker ? 0 : theme.radius.md,
+                      borderWidth: 1,
+                      borderColor: showCategoryPicker ? theme.colors.accent : theme.colors.border,
+                      paddingHorizontal: 12,
+                      paddingVertical: 12,
+                      opacity: pressed ? 0.8 : 1,
+                    })}
+                  >
+                    <Text style={{ flex: 1, color: customSpCategory ? theme.colors.text : theme.colors.textMuted, fontSize: 15 }}>
+                      {customSpCategory || t.spareparts.selectCategory}
+                    </Text>
+                    <Ionicons
+                      name={showCategoryPicker ? 'chevron-up' : 'chevron-down'}
+                      size={16}
+                      color={showCategoryPicker ? theme.colors.accent : theme.colors.textMuted}
+                    />
+                  </Pressable>
+
+                  {showCategoryPicker && (
+                    <View style={{
+                      backgroundColor: theme.colors.card,
+                      borderWidth: 1,
+                      borderTopWidth: 0,
+                      borderColor: theme.colors.accent,
+                      borderBottomLeftRadius: theme.radius.md,
+                      borderBottomRightRadius: theme.radius.md,
+                    }}>
+                      {/* Search */}
+                      <View style={{ padding: 8 }}>
+                        <View style={{
+                          flexDirection: 'row', alignItems: 'center',
+                          backgroundColor: theme.colors.cardLight,
+                          borderRadius: theme.radius.md,
+                          borderWidth: 1, borderColor: theme.colors.border,
+                          paddingHorizontal: 10, height: 38,
+                        }}>
+                          <Ionicons name="search" size={14} color={theme.colors.textMuted} style={{ marginRight: 6 }} />
+                          <TextInput
+                            value={categorySearch}
+                            onChangeText={setCategorySearch}
+                            placeholder={t.spareparts.searchCategory}
+                            placeholderTextColor={theme.colors.textMuted}
+                            style={{ flex: 1, color: theme.colors.text, fontSize: 13 }}
+                          />
+                        </View>
+                      </View>
+
+                      {/* Input tambah kategori baru */}
+                      {showCategoryInput && (
+                        <View style={{ paddingHorizontal: 8, paddingBottom: 8, flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+                          <View style={{
+                            flex: 1, flexDirection: 'row', alignItems: 'center',
+                            backgroundColor: theme.colors.cardLight,
+                            borderRadius: theme.radius.md,
+                            borderWidth: 1, borderColor: theme.colors.accent,
+                            paddingHorizontal: 10,
+                          }}>
+                            <TextInput
+                              value={newCategory}
+                              onChangeText={setNewCategory}
+                              placeholder={t.spareparts.newCategoryPlaceholder}
+                              placeholderTextColor={theme.colors.textMuted}
+                              autoFocus
+                              style={{ flex: 1, color: theme.colors.text, fontSize: 13, paddingVertical: 8 }}
+                            />
+                          </View>
+                          <Pressable
+                            onPress={() => {
+                              if (newCategory.trim()) {
+                                setCustomSpCategory(newCategory.trim());
+                                setNewCategory('');
+                                setShowCategoryInput(false);
+                                setShowCategoryPicker(false);
+                                setCategorySearch('');
+                              }
+                            }}
+                            disabled={!newCategory.trim()}
+                            style={({ pressed }) => ({
+                              width: 36, height: 36, borderRadius: theme.radius.md,
+                              backgroundColor: newCategory.trim() ? theme.colors.accent : theme.colors.border,
+                              alignItems: 'center', justifyContent: 'center',
+                              opacity: pressed ? 0.7 : 1,
+                            })}
+                          >
+                            <Ionicons name="checkmark" size={18} color="#fff" />
+                          </Pressable>
+                        </View>
+                      )}
+
+                      {/* Daftar kategori */}
+                      <ScrollView
+                        nestedScrollEnabled
+                        style={{ maxHeight: 160 }}
+                        keyboardShouldPersistTaps="handled"
+                      >
+                        <Pressable
+                          onPress={() => setShowCategoryInput(!showCategoryInput)}
+                          style={({ pressed }) => ({
+                            flexDirection: 'row', alignItems: 'center', gap: 8,
+                            paddingHorizontal: 12, paddingVertical: 10,
+                            backgroundColor: pressed || showCategoryInput ? theme.colors.accent + '18' : 'transparent',
+                            borderBottomWidth: 1, borderBottomColor: theme.colors.divider,
+                          })}
+                        >
+                          <Ionicons name={showCategoryInput ? 'close-circle' : 'add-circle'} size={16} color={theme.colors.accent} />
+                          <Text style={{ color: theme.colors.accent, fontWeight: '600', fontSize: 13 }}>
+                            {t.spareparts.addNewCategory}
+                          </Text>
+                        </Pressable>
+
+                        {filteredCategories.length === 0 ? (
+                          <Text style={{ color: theme.colors.textMuted, textAlign: 'center', padding: 12, fontSize: 13 }}>
+                            {categorySearch ? t.spareparts.notFound : t.spareparts.empty}
+                          </Text>
+                        ) : (
+                          filteredCategories.map((cat) => (
+                            <Pressable
+                              key={cat}
+                              onPress={() => {
+                                setCustomSpCategory(cat);
+                                setShowCategoryPicker(false);
+                                setCategorySearch('');
+                                setShowCategoryInput(false);
+                              }}
+                              style={({ pressed }) => ({
+                                flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+                                paddingHorizontal: 12, paddingVertical: 10,
+                                borderBottomWidth: 1, borderBottomColor: theme.colors.divider,
+                                backgroundColor: pressed
+                                  ? theme.colors.cardLight
+                                  : customSpCategory === cat ? theme.colors.accent + '12' : 'transparent',
+                              })}
+                            >
+                              <Text style={{
+                                color: customSpCategory === cat ? theme.colors.accent : theme.colors.text,
+                                fontSize: 14, fontWeight: customSpCategory === cat ? '700' : '500',
+                              }}>
+                                {cat}
+                              </Text>
+                              {customSpCategory === cat && (
+                                <Ionicons name="checkmark" size={15} color={theme.colors.accent} />
+                              )}
+                            </Pressable>
+                          ))
+                        )}
+                      </ScrollView>
+                    </View>
+                  )}
+                </View>
                 <View style={{ flexDirection: 'row', gap: 12 }}>
                   <View style={{ flex: 1 }}>
                     <Input
@@ -1223,7 +1789,7 @@ export default function TransactionForm() {
                 const isOut = item.stock <= 0;
                 return (
                   <Pressable
-                    onPress={() => !isOut && addSparepart(item)}
+                    onPress={() => !isOut && openQtyDiscountModal(item)}
                     disabled={isOut}
                     style={({ pressed }) => ({
                       flexDirection: 'row',
@@ -1287,129 +1853,6 @@ export default function TransactionForm() {
             />
           </Pressable>
         </Pressable>
-
-        {/* Category Picker Modal */}
-        <Modal visible={showCategoryPicker} transparent animationType="slide">
-          <Pressable
-            onPress={() => setShowCategoryPicker(false)}
-            style={{
-              flex: 1,
-              backgroundColor: 'rgba(0,0,0,0.6)',
-              justifyContent: 'flex-end',
-            }}
-          >
-            <Pressable
-              onPress={(e) => e.stopPropagation()}
-              style={{
-                backgroundColor: theme.colors.surface,
-                borderTopLeftRadius: theme.radius.xl,
-                borderTopRightRadius: theme.radius.xl,
-                paddingTop: 8,
-                paddingBottom: Math.max(28, insets.bottom + 16),
-                height: '90%',
-              }}
-            >
-              <View
-                style={{
-                  width: 40,
-                  height: 4,
-                  borderRadius: 2,
-                  backgroundColor: theme.colors.borderLight,
-                  alignSelf: 'center',
-                  marginBottom: 12,
-                }}
-              />
-
-              <View style={{ paddingHorizontal: 20, marginBottom: 12 }}>
-                <Text style={{ color: theme.colors.text, fontSize: 18, fontWeight: '800' }}>
-                  {t.spareparts.pickCategory}
-                </Text>
-              </View>
-
-              {/* Add new category section at the top */}
-              <View style={{ paddingHorizontal: 16, marginBottom: 12 }}>
-                <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
-                  <View style={{ flex: 1 }}>
-                    <Input
-                      value={newCategory}
-                      onChangeText={setNewCategory}
-                      placeholder={t.spareparts.newCategoryPlaceholder}
-                      containerStyle={{ marginBottom: 0 }}
-                    />
-                  </View>
-                  <Pressable
-                    onPress={() => {
-                      if (newCategory.trim()) {
-                        setCustomSpCategory(newCategory.trim());
-                        setNewCategory('');
-                        setShowCategoryPicker(false);
-                      }
-                    }}
-                    disabled={!newCategory.trim()}
-                    style={({ pressed }) => ({
-                      width: 48,
-                      height: 48,
-                      borderRadius: theme.radius.md,
-                      backgroundColor: newCategory.trim() ? theme.colors.accent : theme.colors.card,
-                      borderWidth: 1,
-                      borderColor: newCategory.trim() ? theme.colors.accent : theme.colors.border,
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      opacity: pressed ? 0.7 : 1,
-                    })}
-                  >
-                    <Ionicons
-                      name="add"
-                      size={20}
-                      color={newCategory.trim() ? '#fff' : theme.colors.textSecondary}
-                    />
-                  </Pressable>
-                </View>
-              </View>
-
-              <FlatList
-                data={categories}
-                keyExtractor={(item) => item}
-                contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 12 }}
-                renderItem={({ item }) => (
-                  <Pressable
-                    onPress={() => {
-                      setCustomSpCategory(item);
-                      setShowCategoryPicker(false);
-                    }}
-                    style={{
-                      padding: 14,
-                      backgroundColor: customSpCategory === item ? theme.colors.accent + '15' : theme.colors.card,
-                      borderRadius: theme.radius.lg,
-                      borderWidth: 1,
-                      borderColor: customSpCategory === item ? theme.colors.accent : theme.colors.border,
-                      marginBottom: 8,
-                    }}
-                  >
-                    <Text
-                      style={{
-                        color: customSpCategory === item ? theme.colors.accent : theme.colors.text,
-                        fontSize: 15,
-                        fontWeight: '600',
-                      }}
-                    >
-                      {item}
-                    </Text>
-                  </Pressable>
-                )}
-              />
-
-              <View style={{ paddingHorizontal: 16, paddingBottom: 16 }}>
-                <Button
-                  title={t.common.close}
-                  variant="ghost"
-                  fullWidth
-                  onPress={() => setShowCategoryPicker(false)}
-                />
-              </View>
-            </Pressable>
-          </Pressable>
-        </Modal>
       </Modal>
 
       {/* Kasir confirm modal */}
@@ -1419,6 +1862,10 @@ export default function TransactionForm() {
         animationType="fade"
         onRequestClose={() => setConfirmModalOpen(false)}
       >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={{ flex: 1 }}
+        >
         <View
           style={{
             flex: 1,
@@ -1441,36 +1888,73 @@ export default function TransactionForm() {
               {t.transactions.validationTitle}
             </Text>
 
-            <ScrollView style={{ maxHeight: 320 }} showsVerticalScrollIndicator={false}>
-              {/* Items */}
-              <Text style={{ color: theme.colors.textSecondary, fontSize: 12, fontWeight: '600', marginBottom: 6 }}>{t.transactions.itemDetails}</Text>
-              <View style={{ gap: 0, marginBottom: 12 }}>
-                {parts.map((p, i) => (
-                  <View
-                    key={i}
-                    style={{
-                      flexDirection: 'row',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      paddingVertical: 8,
-                      borderBottomWidth: i === parts.length - 1 ? 0 : 1,
-                      borderBottomColor: theme.colors.divider,
-                    }}
-                  >
-                    <View style={{ flex: 1 }}>
-                      <Text style={{ color: theme.colors.text, fontSize: 13, fontWeight: '500' }} numberOfLines={1}>
-                        {p.sparepart_name}
-                      </Text>
-                      <Text style={{ color: theme.colors.textMuted, fontSize: 11 }}>
-                        {formatCurrency(p.sell_price)} × {p.quantity}
-                      </Text>
-                    </View>
-                    <Text style={{ color: theme.colors.text, fontSize: 13, fontWeight: '700' }}>
-                      {formatCurrency(p.sell_price * p.quantity)}
-                    </Text>
+            <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+              {/* Services */}
+              {services.length > 0 && (
+                <>
+                  <Text style={{ color: theme.colors.textSecondary, fontSize: 12, fontWeight: '600', marginBottom: 6 }}>Jasa</Text>
+                  <View style={{ gap: 0, marginBottom: 12 }}>
+                    {services.map((s, i) => (
+                      <View
+                        key={i}
+                        style={{
+                          flexDirection: 'row',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          paddingVertical: 8,
+                          borderBottomWidth: i === services.length - 1 ? 0 : 1,
+                          borderBottomColor: theme.colors.divider,
+                        }}
+                      >
+                        <Text style={{ color: theme.colors.text, fontSize: 13, fontWeight: '500', flex: 1 }} numberOfLines={1}>
+                          {s.service_name}
+                        </Text>
+                        <Text style={{ color: theme.colors.text, fontSize: 13, fontWeight: '700', marginLeft: 8 }}>
+                          {formatCurrency(s.price)}
+                        </Text>
+                      </View>
+                    ))}
                   </View>
-                ))}
-              </View>
+                </>
+              )}
+              {/* Spareparts */}
+              {parts.length > 0 && (
+                <>
+                  <Text style={{ color: theme.colors.textSecondary, fontSize: 12, fontWeight: '600', marginBottom: 6 }}>{t.transactions.itemDetails}</Text>
+                  <View style={{ gap: 0, marginBottom: 12 }}>
+                    {parts.map((p, i) => (
+                      <View
+                        key={i}
+                        style={{
+                          flexDirection: 'row',
+                          justifyContent: 'space-between',
+                          alignItems: 'flex-start',
+                          paddingVertical: 8,
+                          borderBottomWidth: i === parts.length - 1 ? 0 : 1,
+                          borderBottomColor: theme.colors.divider,
+                        }}
+                      >
+                        <View style={{ flex: 1 }}>
+                          <Text style={{ color: theme.colors.text, fontSize: 13, fontWeight: '500' }} numberOfLines={1}>
+                            {p.sparepart_name}
+                          </Text>
+                          <Text style={{ color: theme.colors.textMuted, fontSize: 11 }}>
+                            {formatCurrency(p.sell_price)} × {p.quantity}
+                          </Text>
+                          {p.discount_per_item > 0 && (
+                            <Text style={{ color: theme.colors.danger, fontSize: 11 }}>
+                              Diskon -{formatCurrency(p.discount_per_item)} /item = -{formatCurrency(p.discount_per_item * p.quantity)}
+                            </Text>
+                          )}
+                        </View>
+                        <Text style={{ color: theme.colors.accent, fontSize: 13, fontWeight: '700', marginLeft: 8 }}>
+                          {formatCurrency((p.sell_price - p.discount_per_item) * p.quantity)}
+                        </Text>
+                      </View>
+                    ))}
+                  </View>
+                </>
+              )}
 
               {/* Totals */}
               <View
@@ -1481,9 +1965,25 @@ export default function TransactionForm() {
                   gap: 8,
                 }}
               >
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                  <Text style={{ color: theme.colors.textSecondary, fontSize: 13 }}>{t.transactions.total}</Text>
-                  <Text style={{ color: theme.colors.text, fontSize: 14, fontWeight: '700' }}>
+                {totalDiscount > 0 && (
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                    <Text style={{ color: theme.colors.danger, fontSize: 13 }}>Total Diskon Item</Text>
+                    <Text style={{ color: theme.colors.danger, fontSize: 13, fontWeight: '700' }}>
+                      -{formatCurrency(totalDiscount)}
+                    </Text>
+                  </View>
+                )}
+                {customDiscount > 0 && (
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                    <Text style={{ color: theme.colors.danger, fontSize: 13 }}>Diskon Custom</Text>
+                    <Text style={{ color: theme.colors.danger, fontSize: 13, fontWeight: '700' }}>
+                      -{formatCurrency(customDiscount)}
+                    </Text>
+                  </View>
+                )}
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', borderTopWidth: (totalDiscount > 0 || customDiscount > 0) ? 1 : 0, borderTopColor: theme.colors.divider, paddingTop: (totalDiscount > 0 || customDiscount > 0) ? 8 : 0 }}>
+                  <Text style={{ color: theme.colors.textSecondary, fontSize: 14, fontWeight: '600' }}>Total Bayar</Text>
+                  <Text style={{ color: theme.colors.accent, fontSize: 15, fontWeight: '800' }}>
                     {formatCurrency(grandTotal)}
                   </Text>
                 </View>
@@ -1528,6 +2028,7 @@ export default function TransactionForm() {
             </View>
           </View>
         </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* Post-save action modal */}

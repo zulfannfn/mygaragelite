@@ -82,6 +82,10 @@ export default function ReceiptPage() {
   const isPaid = tx.status === 'paid';
   const isRetail = tx.type === 'retail';
   const shortId = tx.id.slice(0, 8).toUpperCase();
+  const itemDisc = (tx.spareparts ?? []).reduce((s, p) => s + (p.discount_per_item ?? 0) * p.quantity, 0);
+  const custDisc = tx.custom_discount ?? 0;
+  const grossSpTotal = (tx.spareparts ?? []).reduce((s, p) => s + p.sell_price * p.quantity, 0);
+  const hasDisc = itemDisc > 0 || custDisc > 0;
 
   return (
     <View style={{ flex: 1, backgroundColor: '#f2f2f2' }}>
@@ -224,7 +228,13 @@ export default function ReceiptPage() {
                 <TotalRow label="Subtotal Jasa" value={formatCurrency(tx.total_service)} />
               ) : null}
               {isPaid && tx.spareparts && tx.spareparts.length > 0 ? (
-                <TotalRow label="Subtotal Sparepart" value={formatCurrency(tx.total_sparepart)} />
+                <TotalRow label="Subtotal Sparepart" value={formatCurrency(hasDisc ? grossSpTotal : tx.total_sparepart)} />
+              ) : null}
+              {itemDisc > 0 ? (
+                <TotalRow label="Diskon Item" value={`-${formatCurrency(itemDisc)}`} danger />
+              ) : null}
+              {custDisc > 0 ? (
+                <TotalRow label="Diskon Custom" value={`-${formatCurrency(custDisc)}`} danger />
               ) : null}
               <TotalRow label="TOTAL" value={formatCurrency(tx.total_amount)} bold large />
               {isPaid && tx.payment_method ? (
@@ -383,11 +393,13 @@ function TotalRow({
   value,
   bold,
   large,
+  danger,
 }: {
   label: string;
   value: string;
   bold?: boolean;
   large?: boolean;
+  danger?: boolean;
 }) {
   return (
     <View
@@ -400,7 +412,7 @@ function TotalRow({
       <Text
         style={{
           fontSize: large ? 14 : 12,
-          color: '#555',
+          color: danger ? '#e53e3e' : '#555',
           fontWeight: bold ? '700' : '400',
         }}
       >
@@ -409,7 +421,7 @@ function TotalRow({
       <Text
         style={{
           fontSize: large ? 15 : 12,
-          color: '#222',
+          color: danger ? '#e53e3e' : '#222',
           fontWeight: bold ? '800' : '600',
         }}
       >

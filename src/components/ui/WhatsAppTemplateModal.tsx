@@ -246,10 +246,11 @@ export function WhatsAppTemplateModal({
             <>
               <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 8 }}>
                 {TEMPLATES.filter((tpl) => {
-                  if (tx?.status === 'paid') {
-                    return tpl.key === 'paid';
-                  }
-                  return tpl.key !== 'paid';
+                  if (tx?.status === 'paid')            return tpl.key === 'paid';
+                  if (tx?.status === 'pending')         return tpl.key === 'created';
+                  if (tx?.status === 'in_progress')     return tpl.key === 'ready';
+                  if (tx?.status === 'waiting_payment') return tpl.key === 'ready';
+                  return false;
                 }).map((tpl) => {
                   const active = selected === tpl.key;
                   return (

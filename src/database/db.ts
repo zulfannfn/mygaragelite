@@ -52,6 +52,10 @@ export async function initDatabase(): Promise<void> {
 export async function resetDatabase(): Promise<void> {
   const db = await getDatabase();
   await db.execAsync(`
+    DROP TABLE IF EXISTS purchase_order_items;
+    DROP TABLE IF EXISTS purchase_orders;
+    DROP TABLE IF EXISTS service_reminder_sends;
+    DROP TABLE IF EXISTS stock_history;
     DROP TABLE IF EXISTS transaction_spareparts;
     DROP TABLE IF EXISTS service_items;
     DROP TABLE IF EXISTS reminders;
@@ -69,6 +73,10 @@ export async function resetDatabase(): Promise<void> {
 export async function clearDatabase(): Promise<void> {
   const db = await getDatabase();
   await db.execAsync(`
+    DROP TABLE IF EXISTS purchase_order_items;
+    DROP TABLE IF EXISTS purchase_orders;
+    DROP TABLE IF EXISTS service_reminder_sends;
+    DROP TABLE IF EXISTS stock_history;
     DROP TABLE IF EXISTS transaction_spareparts;
     DROP TABLE IF EXISTS service_items;
     DROP TABLE IF EXISTS reminders;

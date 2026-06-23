@@ -1,7 +1,7 @@
 import { Alert } from 'react-native';
 import { PrinterPrintError } from '../services/receiptService';
 
-type RouterLike = { push: (href: string) => void };
+type RouterLike = { push: (href: '/settings') => void };
 
 export function showPrinterReconnectAlert(router: RouterLike): void {
   Alert.alert(

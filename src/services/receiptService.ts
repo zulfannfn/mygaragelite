@@ -112,9 +112,16 @@ export const receiptService = {
       lines.push('');
     }
 
+    const itemDisc = (tx.spareparts ?? []).reduce((s, p) => s + (p.discount_per_item ?? 0) * p.quantity, 0);
+    const custDisc = tx.custom_discount ?? 0;
+    const grossSp = (tx.spareparts ?? []).reduce((s, p) => s + p.sell_price * p.quantity, 0);
+    const hasDisc = itemDisc > 0 || custDisc > 0;
+
     lines.push(sep);
     if (tx.type !== 'retail') lines.push(`Subtotal Jasa     : ${formatCurrency(tx.total_service)}`);
-    lines.push(`Subtotal Sparepart: ${formatCurrency(tx.total_sparepart)}`);
+    lines.push(`Subtotal Sparepart: ${formatCurrency(hasDisc ? grossSp : tx.total_sparepart)}`);
+    if (itemDisc > 0) lines.push(`Diskon Item       : -${formatCurrency(itemDisc)}`);
+    if (custDisc > 0) lines.push(`Diskon Custom     : -${formatCurrency(custDisc)}`);
     lines.push(`*TOTAL            : ${formatCurrency(tx.total_amount)}*`);
     if (tx.type === 'retail' && tx.payment_method === 'Tunai' && tx.paid_amount > 0) {
       lines.push(`Bayar             : ${formatCurrency(tx.paid_amount)}`);
@@ -161,6 +168,11 @@ export const receiptService = {
       if (shop.paperSize === '80mm') return "width: 100%; max-width: 300px; font-size: 12px; margin: 0 auto; padding: 10px 8px;";
       return "font-family: -apple-system, system-ui, 'Segoe UI', sans-serif; padding: 18px; color: #222;";
     };
+
+    const htmlItemDisc = (tx.spareparts ?? []).reduce((s, p) => s + (p.discount_per_item ?? 0) * p.quantity, 0);
+    const htmlCustDisc = tx.custom_discount ?? 0;
+    const htmlGrossSp = (tx.spareparts ?? []).reduce((s, p) => s + p.sell_price * p.quantity, 0);
+    const htmlHasDisc = htmlItemDisc > 0 || htmlCustDisc > 0;
 
     return `
     <html>
@@ -229,7 +241,9 @@ export const receiptService = {
 
         <div class="totals">
           ${tx.type !== 'retail' ? `<div class="row"><span>Subtotal Jasa</span><span>${formatCurrency(tx.total_service)}</span></div>` : ''}
-          <div class="row"><span>Subtotal Sparepart</span><span>${formatCurrency(tx.total_sparepart)}</span></div>
+          <div class="row"><span>Subtotal Sparepart</span><span>${formatCurrency(htmlHasDisc ? htmlGrossSp : tx.total_sparepart)}</span></div>
+          ${htmlItemDisc > 0 ? `<div class="row"><span>Diskon Item</span><span style="color:#e53e3e">-${formatCurrency(htmlItemDisc)}</span></div>` : ''}
+          ${htmlCustDisc > 0 ? `<div class="row"><span>Diskon Custom</span><span style="color:#e53e3e">-${formatCurrency(htmlCustDisc)}</span></div>` : ''}
           <div class="row grand"><span>TOTAL</span><span>${formatCurrency(tx.total_amount)}</span></div>
           ${tx.type === 'retail' && tx.payment_method === 'Tunai' && tx.paid_amount > 0 ? `<div class="row"><span>Bayar</span><span>${formatCurrency(tx.paid_amount)}</span></div>` : ''}
           ${tx.type === 'retail' && tx.payment_method === 'Tunai' && tx.change_amount > 0 ? `<div class="row"><span>Kembali</span><span>${formatCurrency(tx.change_amount)}</span></div>` : ''}
@@ -412,7 +426,13 @@ export const receiptService = {
             
             rawPrint += sep;
             if (tx.type !== 'retail') rawPrint += alignLR('Total Jasa', formatCurrency(tx.total_service));
-            rawPrint += alignLR('Total Part', formatCurrency(tx.total_sparepart));
+            const bleItemDisc = (tx.spareparts ?? []).reduce((s, p) => s + (p.discount_per_item ?? 0) * p.quantity, 0);
+            const bleCustDisc = tx.custom_discount ?? 0;
+            const bleGrossSp = (tx.spareparts ?? []).reduce((s, p) => s + p.sell_price * p.quantity, 0);
+            const bleHasDisc = bleItemDisc > 0 || bleCustDisc > 0;
+            rawPrint += alignLR('Total Part', formatCurrency(bleHasDisc ? bleGrossSp : tx.total_sparepart));
+            if (bleItemDisc > 0) rawPrint += alignLR('Diskon Item', '-' + formatCurrency(bleItemDisc));
+            if (bleCustDisc > 0) rawPrint += alignLR('Diskon Custom', '-' + formatCurrency(bleCustDisc));
             rawPrint += alignLR('TOTAL', formatCurrency(tx.total_amount));
             if (tx.type === 'retail' && tx.payment_method === 'Tunai') {
               rawPrint += alignLR('Bayar', formatCurrency(tx.paid_amount));
@@ -527,6 +547,13 @@ export const receiptService = {
       for (const p of tx.spareparts) {
         lines.push(`• ${p.sparepart_name} ×${p.quantity} — ${formatCurrency(p.sell_price * p.quantity)}`);
       }
+    }
+    const waItemDisc = (tx.spareparts ?? []).reduce((s, p) => s + (p.discount_per_item ?? 0) * p.quantity, 0);
+    const waCustDisc = tx.custom_discount ?? 0;
+    if (waItemDisc > 0 || waCustDisc > 0) {
+      lines.push('');
+      if (waItemDisc > 0) lines.push(`Diskon Item: -${formatCurrency(waItemDisc)}`);
+      if (waCustDisc > 0) lines.push(`Diskon Custom: -${formatCurrency(waCustDisc)}`);
     }
     lines.push('');
     lines.push(`*TOTAL TAGIHAN: ${formatCurrency(tx.total_amount)}*`);

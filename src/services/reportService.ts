@@ -1,5 +1,5 @@
 import { getDatabase } from '../database/db';
-import { CategoryStats, DashboardStats, PaymentMethodTotal, ReportData, TopMechanic, TopService, TopSparepart } from '../types';
+import { CashierStats, CategoryStats, CustomerLoyaltyItem, DashboardStats, PaymentMethodTotal, ReportData, RevenueStats, TopMechanic, TopService, TopSparepart, VehicleTypeStats } from '../types';
 import { endOfDay, endOfMonth, endOfYear, startOfDay, startOfMonth, startOfYear } from '../utils/date';
 
 export const reportService = {
@@ -37,6 +37,31 @@ export const reportService = {
       monthStart, monthEnd
     );
 
+    const yesterdayTs = Date.now() - 86400000;
+    const yesterdayStart = startOfDay(yesterdayTs);
+    const yesterdayEnd = endOfDay(yesterdayTs);
+    const yesterdayRev = await db.getFirstAsync<{ total: number }>(
+      `SELECT COALESCE(SUM(total_amount), 0) as total FROM transactions WHERE status = 'paid' AND created_at BETWEEN ? AND ?`,
+      yesterdayStart, yesterdayEnd
+    );
+
+    const todayBuyCost = await db.getFirstAsync<{ total: number }>(
+      `SELECT COALESCE(SUM(tsp.quantity * COALESCE(s.buy_price, 0)), 0) as total
+       FROM transaction_spareparts tsp
+       JOIN transactions t ON t.id = tsp.transaction_id
+       LEFT JOIN spareparts s ON s.id = tsp.sparepart_id
+       WHERE t.status = 'paid' AND t.created_at BETWEEN ? AND ?`,
+      todayStart, todayEnd
+    );
+    const yesterdayBuyCost = await db.getFirstAsync<{ total: number }>(
+      `SELECT COALESCE(SUM(tsp.quantity * COALESCE(s.buy_price, 0)), 0) as total
+       FROM transaction_spareparts tsp
+       JOIN transactions t ON t.id = tsp.transaction_id
+       LEFT JOIN spareparts s ON s.id = tsp.sparepart_id
+       WHERE t.status = 'paid' AND t.created_at BETWEEN ? AND ?`,
+      yesterdayStart, yesterdayEnd
+    );
+
     const yearStart = startOfYear();
     const yearEnd = endOfYear();
     const yearRev = await db.getFirstAsync<{ total: number }>(
@@ -46,8 +71,37 @@ export const reportService = {
       yearStart, yearEnd
     );
 
+    const monthBuyCost = await db.getFirstAsync<{ total: number }>(
+      `SELECT COALESCE(SUM(tsp.quantity * COALESCE(s.buy_price, 0)), 0) as total
+       FROM transaction_spareparts tsp
+       JOIN transactions t ON t.id = tsp.transaction_id
+       LEFT JOIN spareparts s ON s.id = tsp.sparepart_id
+       WHERE t.status = 'paid' AND t.created_at BETWEEN ? AND ?`,
+      monthStart, monthEnd
+    );
+    const yearBuyCost = await db.getFirstAsync<{ total: number }>(
+      `SELECT COALESCE(SUM(tsp.quantity * COALESCE(s.buy_price, 0)), 0) as total
+       FROM transaction_spareparts tsp
+       JOIN transactions t ON t.id = tsp.transaction_id
+       LEFT JOIN spareparts s ON s.id = tsp.sparepart_id
+       WHERE t.status = 'paid' AND t.created_at BETWEEN ? AND ?`,
+      yearStart, yearEnd
+    );
+
     const pending = await db.getFirstAsync<{ count: number }>(
       `SELECT COUNT(*) as count FROM transactions WHERE status = 'pending'`
+    );
+
+    const inProgress = await db.getFirstAsync<{ count: number }>(
+      `SELECT COUNT(*) as count FROM transactions WHERE status = 'in_progress'`
+    );
+
+    const waitingPayment = await db.getFirstAsync<{ count: number }>(
+      `SELECT COUNT(*) as count FROM transactions WHERE status = 'waiting_payment'`
+    );
+
+    const completed = await db.getFirstAsync<{ count: number }>(
+      `SELECT COUNT(*) as count FROM transactions WHERE status = 'paid'`
     );
 
     const lowStock = await db.getFirstAsync<{ count: number }>(
@@ -70,14 +124,25 @@ export const reportService = {
       `SELECT COUNT(*) as count FROM service_items`
     );
 
+    const todayRev = todayRevenue?.total ?? 0;
+    const yestRev = yesterdayRev?.total ?? 0;
+
     return {
-      todayRevenue: todayRevenue?.total ?? 0,
+      todayRevenue: todayRev,
+      yesterdayRevenue: yestRev,
+      todayGrossProfit: todayRev - (todayBuyCost?.total ?? 0),
+      yesterdayGrossProfit: yestRev - (yesterdayBuyCost?.total ?? 0),
+      monthGrossProfit: (monthRev?.total ?? 0) - (monthBuyCost?.total ?? 0),
+      yearGrossProfit: (yearRev?.total ?? 0) - (yearBuyCost?.total ?? 0),
       todayServiceCount: todayTx?.count ?? 0,
       todaySparepartSold: todaySp?.total ?? 0,
       todayTransactionCount: todayTx?.count ?? 0,
       monthRevenue: monthRev?.total ?? 0,
       yearRevenue: yearRev?.total ?? 0,
       pendingTransactions: pending?.count ?? 0,
+      inProgressTransactions: inProgress?.count ?? 0,
+      waitingPaymentTransactions: waitingPayment?.count ?? 0,
+      completedTransactions: completed?.count ?? 0,
       lowStockCount: lowStock?.count ?? 0,
       outOfStockCount: outOfStock?.count ?? 0,
       totalTransactions: totalTx?.count ?? 0,
@@ -182,7 +247,11 @@ export const reportService = {
          tsp.sparepart_id as id,
          COALESCE(s.name, tsp.sparepart_name) as name,
          SUM(tsp.quantity) as totalSold,
-         SUM(tsp.quantity * tsp.sell_price) as revenue
+         SUM(tsp.quantity * tsp.sell_price) as revenue,
+         SUM(tsp.quantity * (tsp.sell_price - COALESCE(tsp.discount_per_item, 0) - COALESCE(s.buy_price, 0))
+           - CASE WHEN COALESCE(t.total_sparepart, 0) > 0
+                  THEN COALESCE(t.custom_discount, 0) * (tsp.quantity * tsp.sell_price) / t.total_sparepart
+                  ELSE 0 END) as margin
        FROM transaction_spareparts tsp
        JOIN transactions t ON t.id = tsp.transaction_id
        LEFT JOIN spareparts s ON s.id = tsp.sparepart_id
@@ -253,9 +322,20 @@ export const reportService = {
          t.mechanic_id as id,
          COALESCE(e.name, 'Tanpa Mekanik') as name,
          COUNT(*) as transactionCount,
-         SUM(t.total_amount) as revenue
+         SUM(t.total_amount) as revenue,
+         SUM(t.total_service) as serviceRevenue,
+         COALESCE(SUM(sp_margin.margin), 0) as sparepartMargin
        FROM transactions t
        LEFT JOIN employees e ON e.id = t.mechanic_id
+       LEFT JOIN (
+         SELECT tsp.transaction_id,
+                SUM(tsp.quantity * (tsp.sell_price - COALESCE(tsp.discount_per_item, 0) - COALESCE(s.buy_price, 0)))
+                  - MAX(COALESCE(tx.custom_discount, 0)) as margin
+         FROM transaction_spareparts tsp
+         JOIN transactions tx ON tx.id = tsp.transaction_id
+         LEFT JOIN spareparts s ON s.id = tsp.sparepart_id
+         GROUP BY tsp.transaction_id
+       ) sp_margin ON sp_margin.transaction_id = t.id
        WHERE t.status = 'paid' AND t.mechanic_id IS NOT NULL ${hasRange ? 'AND t.created_at BETWEEN ? AND ?' : ''}
        GROUP BY t.mechanic_id, e.name
        ORDER BY transactionCount DESC
@@ -263,6 +343,148 @@ export const reportService = {
       ...(hasRange ? [start, end] : []),
       limit
     );
+  },
+
+  async getRevenueStats(start?: number, end?: number): Promise<RevenueStats> {
+    const db = await getDatabase();
+    const hasRange = start !== undefined && end !== undefined;
+    const rangeClause = hasRange ? 'AND created_at BETWEEN ? AND ?' : '';
+    const rangeParams: number[] = hasRange ? [start!, end!] : [];
+
+    const spJoinClause = hasRange ? 'AND t.created_at BETWEEN ? AND ?' : '';
+
+    const svcRow = await db.getFirstAsync<{ serviceRevenue: number }>(
+      `SELECT COALESCE(SUM(total_service), 0) as serviceRevenue
+       FROM transactions WHERE status = 'paid' ${rangeClause}`,
+      ...rangeParams
+    );
+
+    // Gross sparepart revenue = sum(qty * sell_price) before any discounts
+    const grossSpRow = await db.getFirstAsync<{ sparepartRevenue: number }>(
+      `SELECT COALESCE(SUM(tsp.quantity * tsp.sell_price), 0) as sparepartRevenue
+       FROM transaction_spareparts tsp
+       JOIN transactions t ON t.id = tsp.transaction_id
+       WHERE t.status = 'paid' ${spJoinClause}`,
+      ...rangeParams
+    );
+
+    const spRow = await db.getFirstAsync<{ sparepartCost: number }>(
+      `SELECT COALESCE(SUM(tsp.quantity * COALESCE(s.buy_price, 0)), 0) as sparepartCost
+       FROM transaction_spareparts tsp
+       JOIN transactions t ON t.id = tsp.transaction_id
+       LEFT JOIN spareparts s ON s.id = tsp.sparepart_id
+       WHERE t.status = 'paid' ${spJoinClause}`,
+      ...rangeParams
+    );
+
+    const itemDiscRow = await db.getFirstAsync<{ itemDiscount: number }>(
+      `SELECT COALESCE(SUM(tsp.quantity * COALESCE(tsp.discount_per_item, 0)), 0) as itemDiscount
+       FROM transaction_spareparts tsp
+       JOIN transactions t ON t.id = tsp.transaction_id
+       WHERE t.status = 'paid' ${spJoinClause}`,
+      ...rangeParams
+    );
+    const customDiscRow = await db.getFirstAsync<{ customDiscount: number }>(
+      `SELECT COALESCE(SUM(COALESCE(custom_discount, 0)), 0) as customDiscount
+       FROM transactions WHERE status = 'paid' ${rangeClause}`,
+      ...rangeParams
+    );
+
+    const serviceRevenue = svcRow?.serviceRevenue ?? 0;
+    const sparepartRevenue = grossSpRow?.sparepartRevenue ?? 0;
+    const totalRevenue = serviceRevenue + sparepartRevenue;
+    const sparepartCost = spRow?.sparepartCost ?? 0;
+    const itemDiscount = itemDiscRow?.itemDiscount ?? 0;
+    const customDiscount = customDiscRow?.customDiscount ?? 0;
+    const totalDiscount = itemDiscount + customDiscount;
+    const sparepartMargin = sparepartRevenue - sparepartCost - itemDiscount - customDiscount;
+    const grossProfit = serviceRevenue + sparepartMargin;
+
+    return { totalRevenue, serviceRevenue, sparepartRevenue, sparepartCost, sparepartMargin, grossProfit, totalDiscount, itemDiscount, customDiscount };
+  },
+
+  async getVehicleTypeStats(start?: number, end?: number): Promise<VehicleTypeStats> {
+    const db = await getDatabase();
+    const hasRange = start !== undefined && end !== undefined;
+    const row = await db.getFirstAsync<{ motor: number; mobil: number }>(
+      `SELECT
+        COALESCE(SUM(CASE WHEN c.vehicle_type = 'Motor' THEN 1 ELSE 0 END), 0) as motor,
+        COALESCE(SUM(CASE WHEN c.vehicle_type = 'Mobil' THEN 1 ELSE 0 END), 0) as mobil
+       FROM transactions t
+       LEFT JOIN customers c ON c.id = t.customer_id
+       WHERE t.status = 'paid' ${hasRange ? 'AND t.created_at BETWEEN ? AND ?' : ''}`,
+      ...(hasRange ? [start!, end!] : [])
+    );
+    return { motor: row?.motor ?? 0, mobil: row?.mobil ?? 0 };
+  },
+
+  async getCustomerLoyalty(
+    type: 'service' | 'retail' | 'all',
+    start?: number,
+    end?: number,
+    limit: number = 30,
+    customerType?: 'orang' | 'bengkel'
+  ): Promise<CustomerLoyaltyItem[]> {
+    const db = await getDatabase();
+    const hasRange = start !== undefined && end !== undefined;
+    const hasType = type !== 'all';
+    const rows = await db.getAllAsync<{ customer_id: string | null; customer_name: string; transaction_count: number }>(
+      `SELECT
+        t.customer_id,
+        CASE WHEN t.customer_id IS NULL THEN 'Tanpa Pelanggan' ELSE COALESCE(c.name, 'Tanpa Pelanggan') END as customer_name,
+        COUNT(*) as transaction_count
+       FROM transactions t
+       LEFT JOIN customers c ON c.id = t.customer_id
+       WHERE t.status = 'paid'
+       ${hasType ? 'AND t.type = ?' : ''}
+       ${hasRange ? 'AND t.created_at BETWEEN ? AND ?' : ''}
+       ${customerType ? 'AND c.customer_type = ?' : ''}
+       GROUP BY t.customer_id
+       ORDER BY transaction_count DESC
+       LIMIT ?`,
+      ...(hasType ? [type] : []),
+      ...(hasRange ? [start!, end!] : []),
+      ...(customerType ? [customerType] : []),
+      limit
+    );
+    return rows;
+  },
+
+  async getTopCashiers(limit: number = 20, start?: number, end?: number): Promise<CashierStats[]> {
+    const db = await getDatabase();
+    const hasRange = start !== undefined && end !== undefined;
+    const cashiers = await db.getAllAsync<{ cashier_id: string | null; cashier_name: string; transaction_count: number; total_revenue: number }>(
+      `SELECT
+        t.cashier_id,
+        CASE WHEN t.cashier_name IS NULL OR t.cashier_name = '' THEN 'Tanpa Kasir' ELSE t.cashier_name END as cashier_name,
+        COUNT(*) as transaction_count,
+        SUM(t.total_amount) as total_revenue
+       FROM transactions t
+       WHERE t.status = 'paid'
+       ${hasRange ? 'AND t.created_at BETWEEN ? AND ?' : ''}
+       GROUP BY t.cashier_id, t.cashier_name
+       ORDER BY total_revenue DESC
+       LIMIT ?`,
+      ...(hasRange ? [start!, end!] : []), limit
+    );
+    const result: CashierStats[] = [];
+    for (const c of cashiers) {
+      const methods = await db.getAllAsync<{ method: string; total: number; count: number }>(
+        `SELECT
+          COALESCE(payment_method, 'Tunai') as method,
+          SUM(total_amount) as total,
+          COUNT(*) as count
+         FROM transactions
+         WHERE status = 'paid' AND (cashier_id ${c.cashier_id ? '= ?' : 'IS NULL'})
+         ${hasRange ? 'AND created_at BETWEEN ? AND ?' : ''}
+         GROUP BY payment_method
+         ORDER BY total DESC`,
+        ...(c.cashier_id ? [c.cashier_id] : []),
+        ...(hasRange ? [start!, end!] : [])
+      );
+      result.push({ ...c, payment_methods: methods });
+    }
+    return result;
   },
 
   async getCategoryStats(
@@ -276,7 +498,11 @@ export const reportService = {
       `SELECT
          COALESCE(s.category, 'Tanpa Kategori') as category,
          SUM(tsp.quantity * tsp.sell_price) as totalRevenue,
-         SUM(tsp.quantity) as itemsSold
+         SUM(tsp.quantity) as itemsSold,
+         SUM(tsp.quantity * (tsp.sell_price - COALESCE(tsp.discount_per_item, 0) - COALESCE(s.buy_price, 0))
+           - CASE WHEN COALESCE(t.total_sparepart, 0) > 0
+                  THEN COALESCE(t.custom_discount, 0) * (tsp.quantity * tsp.sell_price) / t.total_sparepart
+                  ELSE 0 END) as margin
        FROM transaction_spareparts tsp
        JOIN transactions t ON t.id = tsp.transaction_id
        LEFT JOIN spareparts s ON s.id = tsp.sparepart_id

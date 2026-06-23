@@ -1,7 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useFocusEffect, useRouter } from 'expo-router';
-import React, { useCallback, useMemo, useState } from 'react';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { FlatList, Modal, Platform, Pressable, ScrollView, Text, View } from 'react-native';
+import { AdBanner } from '../../src/components/ui/AdBanner';
 import { Badge } from '../../src/components/ui/Badge';
 import { Card } from '../../src/components/ui/Card';
 import { EmptyState } from '../../src/components/ui/EmptyState';
@@ -20,6 +21,7 @@ export default function SparepartsScreen() {
   const { theme } = useTheme();
   const t = useTranslation();
   const { spareparts, loading, hasMore, search, setSearch, load, loadMore } = useSparepartStore();
+  const { filter: filterParam } = useLocalSearchParams<{ filter?: string }>();
   const [filter, setFilter] = useState<FilterKey>('all');
   const [filterModalOpen, setFilterModalOpen] = useState(false);
   const [tempFilter, setTempFilter] = useState<FilterKey>('all');
@@ -29,6 +31,10 @@ export default function SparepartsScreen() {
       load();
     }, [load])
   );
+
+  useEffect(() => {
+    if (filterParam === 'low' || filterParam === 'out') setFilter(filterParam);
+  }, [filterParam]);
 
   const handleEndReached = () => {
     loadMore();
@@ -90,20 +96,38 @@ export default function SparepartsScreen() {
         title={t.spareparts.title}
         subtitle={`${spareparts.length} ${t.spareparts.items}${lowStockCount > 0 ? ` • ⚠️ ${lowStockCount} ${t.spareparts.lowStockWarning}` : ''}`}
         rightElement={
-          <Pressable
-            onPress={() => router.push('/sparepart-form')}
-            style={({ pressed }) => ({
-              width: 44,
-              height: 44,
-              borderRadius: 22,
-              backgroundColor: theme.colors.accent,
-              alignItems: 'center',
-              justifyContent: 'center',
-              opacity: pressed ? 0.7 : 1,
-            })}
-          >
-            <Ionicons name="add" size={22} color="#fff" />
-          </Pressable>
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            <Pressable
+              onPress={() => router.push('/sparepart-import')}
+              style={({ pressed }) => ({
+                width: 44,
+                height: 44,
+                borderRadius: 22,
+                backgroundColor: theme.colors.card,
+                borderWidth: 1,
+                borderColor: theme.colors.border,
+                alignItems: 'center',
+                justifyContent: 'center',
+                opacity: pressed ? 0.7 : 1,
+              })}
+            >
+              <Ionicons name="document-attach-outline" size={20} color={theme.colors.text} />
+            </Pressable>
+            <Pressable
+              onPress={() => router.push('/sparepart-form')}
+              style={({ pressed }) => ({
+                width: 44,
+                height: 44,
+                borderRadius: 22,
+                backgroundColor: theme.colors.accent,
+                alignItems: 'center',
+                justifyContent: 'center',
+                opacity: pressed ? 0.7 : 1,
+              })}
+            >
+              <Ionicons name="add" size={22} color="#fff" />
+            </Pressable>
+          </View>
         }
       />
 
@@ -235,11 +259,12 @@ export default function SparepartsScreen() {
           ItemSeparatorComponent={() => <View style={{ height: 12 }} />}
           onEndReached={handleEndReached}
           onEndReachedThreshold={0.5}
-          ListFooterComponent={loading && spareparts.length > 0 ? () => (
-            <View style={{ padding: 16 }}>
-              <SkeletonCard />
-            </View>
-          ) : undefined}
+          ListFooterComponent={() => (
+            <>
+              {loading && spareparts.length > 0 && <View style={{ padding: 16 }}><SkeletonCard /></View>}
+              <View style={{ marginTop: 8 }}><AdBanner /></View>
+            </>
+          )}
           ListEmptyComponent={
             <EmptyState
               icon="cube-outline"
@@ -265,7 +290,7 @@ export default function SparepartsScreen() {
             return (
               <Card
                 onPress={() =>
-                  router.push({ pathname: '/sparepart-form', params: { id: item.id } })
+                  router.push({ pathname: '/sparepart-history', params: { id: item.id } })
                 }
                 padding="md"
               >
@@ -307,13 +332,7 @@ export default function SparepartsScreen() {
                       >
                         {item.name}
                       </Text>
-                      <Text
-                        style={{
-                          color: theme.colors.accent,
-                          fontSize: 16,
-                          fontWeight: '800',
-                        }}
-                      >
+                      <Text style={{ color: theme.colors.accent, fontSize: 16, fontWeight: '800' }}>
                         {formatCurrency(item.sell_price)}
                       </Text>
                     </View>
@@ -327,9 +346,19 @@ export default function SparepartsScreen() {
                       }}
                     >
                       <Badge label={item.category} variant="info" />
+                      {item.brand ? <Badge label={item.brand} variant="neutral" /> : null}
                       <Text style={{ color: theme.colors.textMuted, fontSize: 11 }}>
                         Min: {item.min_stock}
                       </Text>
+                      {item.buy_price > 0 ? (() => {
+                        const marginPct = Math.round((item.sell_price - item.buy_price) / item.sell_price * 100);
+                        const mc = marginPct >= 20 ? theme.colors.success : marginPct >= 10 ? theme.colors.warning : theme.colors.danger;
+                        return (
+                          <View style={{ backgroundColor: mc + '22', borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 }}>
+                            <Text style={{ color: mc, fontSize: 11, fontWeight: '700' }}>{marginPct}%</Text>
+                          </View>
+                        );
+                      })() : null}
                     </View>
 
                     {/* Stock progress bar */}

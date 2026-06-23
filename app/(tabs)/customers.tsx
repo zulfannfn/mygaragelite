@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
 import React, { useCallback } from 'react';
 import { FlatList, Pressable, Text, View } from 'react-native';
+import { AdBanner } from '../../src/components/ui/AdBanner';
 import { Badge } from '../../src/components/ui/Badge';
 import { Card } from '../../src/components/ui/Card';
 import { EmptyState } from '../../src/components/ui/EmptyState';
@@ -75,11 +76,12 @@ export default function CustomersScreen() {
           ItemSeparatorComponent={() => <View style={{ height: 12 }} />}
           onEndReached={handleEndReached}
           onEndReachedThreshold={0.5}
-          ListFooterComponent={loading && customers.length > 0 ? () => (
-            <View style={{ padding: 16 }}>
-              <SkeletonCard />
-            </View>
-          ) : undefined}
+          ListFooterComponent={() => (
+            <>
+              {loading && customers.length > 0 && <View style={{ padding: 16 }}><SkeletonCard /></View>}
+              <View style={{ marginTop: 8 }}><AdBanner /></View>
+            </>
+          )}
           ListEmptyComponent={
             <EmptyState
               icon="people-outline"
@@ -117,12 +119,19 @@ export default function CustomersScreen() {
                   </View>
 
                   <View style={{ flex: 1, minWidth: 0 }}>
-                    <Text
-                      style={{ color: theme.colors.text, fontSize: 15, fontWeight: '700' }}
-                      numberOfLines={1}
-                    >
-                      {item.name}
-                    </Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                      <Ionicons
+                        name={item.customer_type === 'bengkel' ? 'business' : 'person'}
+                        size={12}
+                        color={theme.colors.textMuted}
+                      />
+                      <Text
+                        style={{ color: theme.colors.text, fontSize: 15, fontWeight: '700', flex: 1 }}
+                        numberOfLines={1}
+                      >
+                        {item.name}
+                      </Text>
+                    </View>
                     <View
                       style={{
                         flexDirection: 'row',
@@ -135,18 +144,20 @@ export default function CustomersScreen() {
                       {item.plate_number ? (
                         <Badge label={item.plate_number} variant="accent" />
                       ) : null}
-                      <View
-                        style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}
-                      >
-                        <Ionicons
-                          name={vehicleIcon}
-                          size={12}
-                          color={theme.colors.textMuted}
-                        />
-                        <Text style={{ color: theme.colors.textSecondary, fontSize: 12 }}>
-                          {item.vehicle_brand || item.vehicle_type}
-                        </Text>
-                      </View>
+                      {item.customer_type !== 'bengkel' && (
+                        <View
+                          style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}
+                        >
+                          <Ionicons
+                            name={vehicleIcon}
+                            size={12}
+                            color={theme.colors.textMuted}
+                          />
+                          <Text style={{ color: theme.colors.textSecondary, fontSize: 12 }}>
+                            {item.vehicle_brand || item.vehicle_type}
+                          </Text>
+                        </View>
+                      )}
                     </View>
                     {item.phone ? (
                       <View

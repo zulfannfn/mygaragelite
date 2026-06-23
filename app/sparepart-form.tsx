@@ -1,6 +1,6 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, ScrollView, Text, View } from 'react-native';
 import { Button } from '../src/components/ui/Button';
 import { ConfirmDialog } from '../src/components/ui/ConfirmDialog';
 import { Input } from '../src/components/ui/Input';
@@ -13,6 +13,7 @@ import { useTranslation } from '../src/i18n';
 import { useAppStore } from '../src/store/useAppStore';
 import { useSparepartStore } from '../src/store/useSparepartStore';
 import { InterstitialAd } from '../src/components/ui/AdBanner';
+import { stockHistoryService } from '../src/services/stockHistoryService';
 import { parseCurrency } from '../src/utils/currency';
 import { isEmpty } from '../src/utils/validation';
 
@@ -34,9 +35,15 @@ export default function SparepartForm() {
   const [minStock, setMinStock] = useState('5');
   const [buyPrice, setBuyPrice] = useState('');
   const [sellPrice, setSellPrice] = useState('');
+  const [supplier, setSupplier] = useState('');
+  const [barcode, setBarcode] = useState('');
+  const [brand, setBrand] = useState('');
+  const [rackName, setRackName] = useState('');
+  const [rackRow, setRackRow] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [originalStock, setOriginalStock] = useState(0);
 
   useEffect(() => {
     sparepartService.getUniqueCategories().then((cats) => {
@@ -56,9 +63,15 @@ export default function SparepartForm() {
           // because they can just pick it from the list!
         }
         setStock(String(s.stock));
+        setOriginalStock(s.stock);
         setMinStock(String(s.min_stock));
         setBuyPrice(String(s.buy_price));
         setSellPrice(String(s.sell_price));
+        setSupplier(s.supplier ?? '');
+        setBarcode(s.barcode ?? '');
+        setBrand(s.brand ?? '');
+        setRackName(s.rack_name ?? '');
+        setRackRow(s.rack_row ?? '');
       });
     }
   }, [id, isEdit]);
@@ -84,13 +97,27 @@ export default function SparepartForm() {
         min_stock: parseInt(minStock || '0', 10),
         buy_price: parseCurrency(buyPrice),
         sell_price: parseCurrency(sellPrice),
+        supplier: supplier.trim(),
+        barcode: barcode.trim(),
+        brand: brand.trim(),
+        rack_name: rackName.trim(),
+        rack_row: rackRow.trim(),
       };
       if (isEdit && id) {
         await update(id, input);
+        const newStock = input.stock ?? 0;
+        const delta = newStock - originalStock;
+        if (delta !== 0) {
+          await stockHistoryService.record(id, input.name, delta, newStock, 'Edit form', 'adjustment');
+        }
         showToast(t.spareparts.updatedSuccess, 'success');
         await InterstitialAd.show();
       } else {
-        await add(input);
+        const created = await add(input);
+        const initStock = input.stock ?? 0;
+        if (initStock > 0) {
+          await stockHistoryService.record(created.id, input.name, initStock, initStock, 'Stok Awal', 'manual');
+        }
         showToast(t.spareparts.addedSuccess, 'success');
       }
       router.back();
@@ -162,13 +189,35 @@ export default function SparepartForm() {
           )}
           <View style={{ flexDirection: 'row', gap: 10 }}>
             <View style={{ flex: 1 }}>
-              <Input
-                label={t.spareparts.stock}
-                value={stock}
-                onChangeText={(v) => setStock(v.replace(/[^0-9]/g, ''))}
-                keyboardType="numeric"
-                placeholder="0"
-              />
+              {isEdit ? (
+                <View>
+                  <Text style={{ color: theme.colors.textSecondary, fontSize: 12, fontWeight: '600', marginBottom: 6 }}>
+                    {t.spareparts.stock}
+                  </Text>
+                  <View style={{
+                    borderWidth: 1,
+                    borderColor: theme.colors.border,
+                    borderRadius: theme.radius.md,
+                    paddingHorizontal: 14,
+                    paddingVertical: 12,
+                    backgroundColor: theme.colors.cardLight,
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                  }}>
+                    <Text style={{ color: theme.colors.text, fontSize: 15, fontWeight: '700' }}>{stock}</Text>
+                    <Text style={{ color: theme.colors.textMuted, fontSize: 11 }}>via riwayat</Text>
+                  </View>
+                </View>
+              ) : (
+                <Input
+                  label={t.spareparts.stock}
+                  value={stock}
+                  onChangeText={(v) => setStock(v.replace(/[^0-9]/g, ''))}
+                  keyboardType="numeric"
+                  placeholder="0"
+                />
+              )}
             </View>
             <View style={{ flex: 1 }}>
               <Input
@@ -195,6 +244,42 @@ export default function SparepartForm() {
             placeholder="0"
             error={errors.sellPrice}
           />
+          <Input
+            label="Merk Sparepart"
+            value={brand}
+            onChangeText={setBrand}
+            placeholder="Nama merk (opsional)"
+          />
+          <Input
+            label="Nama Supplier"
+            value={supplier}
+            onChangeText={setSupplier}
+            placeholder="Nama supplier (opsional)"
+          />
+          <Input
+            label="Kode Barcode"
+            value={barcode}
+            onChangeText={setBarcode}
+            placeholder="Kode barcode (opsional)"
+          />
+          <View style={{ flexDirection: 'row', gap: 10 }}>
+            <View style={{ flex: 1 }}>
+              <Input
+                label="Nama Rak"
+                value={rackName}
+                onChangeText={setRackName}
+                placeholder="Cth: Rak A (opsional)"
+              />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Input
+                label="Baris Rak"
+                value={rackRow}
+                onChangeText={setRackRow}
+                placeholder="Cth: Baris 2 (opsional)"
+              />
+            </View>
+          </View>
 
           <View style={{ marginTop: 12, gap: 10 }}>
             <Button

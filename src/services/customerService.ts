@@ -1,5 +1,5 @@
 import { getDatabase } from '../database/db';
-import { Customer, VehicleType } from '../types';
+import { Customer, CustomerType, VehicleType } from '../types';
 import { generateId } from '../utils/id';
 
 export interface CustomerInput {
@@ -8,6 +8,7 @@ export interface CustomerInput {
   plate_number?: string;
   vehicle_type?: VehicleType;
   vehicle_brand?: string;
+  customer_type?: CustomerType;
   notes?: string;
 }
 
@@ -58,15 +59,16 @@ export const customerService = {
       plate_number: input.plate_number ?? '',
       vehicle_type: input.vehicle_type ?? 'Motor',
       vehicle_brand: input.vehicle_brand ?? '',
+      customer_type: input.customer_type ?? 'orang',
       notes: input.notes ?? '',
       created_at: now,
       updated_at: now,
     };
     await db.runAsync(
-      `INSERT INTO customers (id, name, phone, plate_number, vehicle_type, vehicle_brand, notes, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO customers (id, name, phone, plate_number, vehicle_type, vehicle_brand, customer_type, notes, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       customer.id, customer.name, customer.phone, customer.plate_number,
-      customer.vehicle_type, customer.vehicle_brand, customer.notes,
+      customer.vehicle_type, customer.vehicle_brand, customer.customer_type, customer.notes,
       customer.created_at, customer.updated_at
     );
     return customer;
@@ -76,13 +78,14 @@ export const customerService = {
     const db = await getDatabase();
     const now = Date.now();
     await db.runAsync(
-      `UPDATE customers SET name = ?, phone = ?, plate_number = ?, vehicle_type = ?, vehicle_brand = ?, notes = ?, updated_at = ?
+      `UPDATE customers SET name = ?, phone = ?, plate_number = ?, vehicle_type = ?, vehicle_brand = ?, customer_type = ?, notes = ?, updated_at = ?
        WHERE id = ?`,
       input.name,
       input.phone ?? '',
       input.plate_number ?? '',
       input.vehicle_type ?? 'Motor',
       input.vehicle_brand ?? '',
+      input.customer_type ?? 'orang',
       input.notes ?? '',
       now,
       id
