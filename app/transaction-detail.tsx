@@ -5,6 +5,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   BackHandler,
+  Keyboard,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -12,6 +13,7 @@ import {
   ScrollView,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -40,6 +42,7 @@ import { handleReceiptPrintError } from '../src/utils/printerAlert';
 export default function TransactionDetail() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { height: windowHeight } = useWindowDimensions();
   const { id } = useLocalSearchParams<{ id: string }>();
   const showToast = useAppStore((s) => s.showToast);
   const { theme } = useTheme();
@@ -74,6 +77,8 @@ export default function TransactionDetail() {
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<string | null>(null);
   const [confirmPaidModal, setConfirmPaidModal] = useState(false);
   const [paidAmount, setPaidAmount] = useState('');
+  const [paymentModalHeaderHeight, setPaymentModalHeaderHeight] = useState(0);
+  const [androidKeyboardHeight, setAndroidKeyboardHeight] = useState(0);
   const [receiptPickerOpen, setReceiptPickerOpen] = useState(false);
   const [selectedReceiptType, setSelectedReceiptType] = useState<'diterima' | 'tagihan'>('tagihan');
   const [nowTick, setNowTick] = useState(Date.now());
@@ -105,6 +110,20 @@ export default function TransactionDetail() {
       return true;
     });
     return () => sub.remove();
+  }, [confirmPaidModal]);
+
+  // Android (edge-to-edge): window dimensions don't shrink when the keyboard
+  // opens, so the modal's height has to be adjusted manually using the keyboard height.
+  useEffect(() => {
+    if (!confirmPaidModal || Platform.OS !== 'android') return;
+    const showSub = Keyboard.addListener('keyboardDidShow', (e) =>
+      setAndroidKeyboardHeight(e.endCoordinates?.height ?? 0)
+    );
+    const hideSub = Keyboard.addListener('keyboardDidHide', () => setAndroidKeyboardHeight(0));
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
   }, [confirmPaidModal]);
 
   const sectionLabel = {
@@ -1826,6 +1845,7 @@ export default function TransactionDetail() {
               backgroundColor: 'rgba(0,0,0,0.7)',
               justifyContent: 'center',
               padding: 24,
+              paddingBottom: 24 + androidKeyboardHeight,
             }}
             onPress={() => setConfirmPaidModal(false)}
           >
@@ -1837,96 +1857,30 @@ export default function TransactionDetail() {
                 padding: 20,
                 borderWidth: 1,
                 borderColor: theme.colors.border,
-                maxHeight: '85%',
+                maxHeight: (windowHeight - androidKeyboardHeight) * 0.85,
                 overflow: 'hidden',
               }}
             >
-              <Text
-                style={{
-                  color: theme.colors.text,
-                  fontSize: 16,
-                  fontWeight: '700',
-                  marginBottom: 12,
-                  textAlign: 'center',
-                }}
-              >
-                {t.transactions.sectionPayment}
-              </Text>
+              <View onLayout={(e) => setPaymentModalHeaderHeight(e.nativeEvent.layout.height)}>
+                <Text
+                  style={{
+                    color: theme.colors.text,
+                    fontSize: 16,
+                    fontWeight: '700',
+                    marginBottom: 12,
+                    textAlign: 'center',
+                  }}
+                >
+                  {t.transactions.sectionPayment}
+                </Text>
+              </View>
 
               <ScrollView
-                style={{ flexGrow: 0, flexShrink: 1 }}
+                style={{ maxHeight: (windowHeight - androidKeyboardHeight) * 0.85 - 40 - paymentModalHeaderHeight }}
                 keyboardShouldPersistTaps="handled"
                 showsVerticalScrollIndicator={false}
               >
-                <Text
-                  style={{
-                    color: theme.colors.textSecondary,
-                    fontSize: 12,
-                    fontWeight: '600',
-                    marginBottom: 6,
-                  }}
-                >
-                  {t.transactions.paymentDetails}
-                </Text>
-                <View style={{ gap: 0, marginBottom: 12 }}>
-                  {tx.service_items?.map((s, i) => (
-                    <View
-                      key={s.id}
-                      style={{
-                        flexDirection: 'row',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        paddingVertical: 8,
-                        borderBottomWidth: i === tx.service_items!.length - 1 ? 0 : 1,
-                        borderBottomColor: theme.colors.divider,
-                      }}
-                    >
-                      <Text
-                        style={{ color: theme.colors.text, fontSize: 13, fontWeight: '500', flex: 1 }}
-                        numberOfLines={1}
-                      >
-                        {s.service_name}
-                      </Text>
-                      <Text style={{ color: theme.colors.text, fontSize: 13, fontWeight: '700' }}>
-                        {formatCurrency(s.price)}
-                      </Text>
-                    </View>
-                  ))}
-                  {tx.spareparts?.map((p, i) => (
-                    <View
-                      key={p.id}
-                      style={{
-                        flexDirection: 'row',
-                        justifyContent: 'space-between',
-                        alignItems: 'flex-start',
-                        paddingVertical: 8,
-                        borderBottomWidth: i === tx.spareparts!.length - 1 ? 0 : 1,
-                        borderBottomColor: theme.colors.divider,
-                      }}
-                    >
-                      <View style={{ flex: 1 }}>
-                        <Text
-                          style={{ color: theme.colors.text, fontSize: 13, fontWeight: '500' }}
-                          numberOfLines={1}
-                        >
-                          {p.sparepart_name}
-                        </Text>
-                        <Text style={{ color: theme.colors.textMuted, fontSize: 11 }}>
-                          {formatCurrency(p.sell_price)} × {p.quantity}
-                        </Text>
-                        {(p.discount_per_item ?? 0) > 0 && (
-                          <Text style={{ color: theme.colors.danger, fontSize: 11 }}>
-                            Diskon -{formatCurrency(p.discount_per_item!)} /item = -{formatCurrency(p.discount_per_item! * p.quantity)}
-                          </Text>
-                        )}
-                      </View>
-                      <Text style={{ color: theme.colors.accent, fontSize: 13, fontWeight: '700', marginLeft: 8 }}>
-                        {formatCurrency((p.sell_price - (p.discount_per_item ?? 0)) * p.quantity)}
-                      </Text>
-                    </View>
-                  ))}
-                </View>
-
+                {/* Totals */}
                 <View
                   style={{
                     backgroundColor: theme.colors.cardLight,
@@ -1961,7 +1915,7 @@ export default function TransactionDetail() {
                         )}
                         {itemDisc > 0 && (
                           <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                            <Text style={{ color: theme.colors.danger, fontSize: 13 }}>Diskon Item</Text>
+                            <Text style={{ color: theme.colors.danger, fontSize: 13 }}>Total Diskon Item</Text>
                             <Text style={{ color: theme.colors.danger, fontSize: 13, fontWeight: '700' }}>
                               -{formatCurrency(itemDisc)}
                             </Text>
@@ -1975,15 +1929,15 @@ export default function TransactionDetail() {
                             </Text>
                           </View>
                         )}
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', borderTopWidth: (itemDisc > 0 || custDisc > 0) ? 1 : 0, borderTopColor: theme.colors.divider, paddingTop: (itemDisc > 0 || custDisc > 0) ? 8 : 0 }}>
+                          <Text style={{ color: theme.colors.textSecondary, fontSize: 14, fontWeight: '600' }}>Total Bayar</Text>
+                          <Text style={{ color: theme.colors.accent, fontSize: 15, fontWeight: '800' }}>
+                            {formatCurrency(tx.total_amount)}
+                          </Text>
+                        </View>
                       </>
                     );
                   })()}
-                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', borderTopWidth: 1, borderTopColor: theme.colors.divider, paddingTop: 8 }}>
-                    <Text style={{ color: theme.colors.textSecondary, fontSize: 13, fontWeight: '700' }}>{t.transactions.total}</Text>
-                    <Text style={{ color: theme.colors.text, fontSize: 14, fontWeight: '700' }}>
-                      {formatCurrency(tx.total_amount)}
-                    </Text>
-                  </View>
                   <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
                     <Text style={{ color: theme.colors.textSecondary, fontSize: 13 }}>{t.transactions.method}</Text>
                     <Text style={{ color: theme.colors.text, fontSize: 14, fontWeight: '700' }}>

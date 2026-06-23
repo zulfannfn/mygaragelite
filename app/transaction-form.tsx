@@ -14,6 +14,7 @@ import {
   ScrollView,
   Text,
   TextInput,
+  useWindowDimensions,
   View
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -62,6 +63,7 @@ interface SparepartLine {
 export default function TransactionForm() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { height: windowHeight } = useWindowDimensions();
   const params = useLocalSearchParams<{ type?: 'service' | 'retail' }>();
   const { theme } = useTheme();
   const t = useTranslation();
@@ -97,6 +99,7 @@ export default function TransactionForm() {
   const [actionBusy, setActionBusy] = useState<'print' | 'wa' | null>(null);
   const [waModalOpen, setWaModalOpen] = useState(false);
   const [confirmModalOpen, setConfirmModalOpen] = useState(false);
+  const [validationModalHeaderHeight, setValidationModalHeaderHeight] = useState(0);
   const [qtyDiscountModal, setQtyDiscountModal] = useState<Sparepart | null>(null);
   const [modalQtyStr, setModalQtyStr] = useState('1');
   const [modalDiscountStr, setModalDiscountStr] = useState('0');
@@ -1881,15 +1884,21 @@ export default function TransactionForm() {
               padding: 20,
               borderWidth: 1,
               borderColor: theme.colors.border,
-              maxHeight: '85%',
+              maxHeight: windowHeight * 0.85,
               overflow: 'hidden',
             }}
           >
-            <Text style={{ color: theme.colors.text, fontSize: 16, fontWeight: '700', marginBottom: 12, textAlign: 'center' }}>
-              {t.transactions.validationTitle}
-            </Text>
+            <View onLayout={(e) => setValidationModalHeaderHeight(e.nativeEvent.layout.height)}>
+              <Text style={{ color: theme.colors.text, fontSize: 16, fontWeight: '700', marginBottom: 12, textAlign: 'center' }}>
+                {t.transactions.validationTitle}
+              </Text>
+            </View>
 
-            <ScrollView style={{ flexGrow: 0, flexShrink: 1 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+            <ScrollView
+              style={{ maxHeight: windowHeight * 0.85 - 40 - validationModalHeaderHeight }}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+            >
               {/* Services */}
               {services.length > 0 && (
                 <>
