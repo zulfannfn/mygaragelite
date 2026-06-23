@@ -1863,7 +1863,7 @@ export default function TransactionForm() {
         onRequestClose={() => setConfirmModalOpen(false)}
       >
         <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
           style={{ flex: 1 }}
         >
         <View
@@ -1882,13 +1882,14 @@ export default function TransactionForm() {
               borderWidth: 1,
               borderColor: theme.colors.border,
               maxHeight: '85%',
+              overflow: 'hidden',
             }}
           >
             <Text style={{ color: theme.colors.text, fontSize: 16, fontWeight: '700', marginBottom: 12, textAlign: 'center' }}>
               {t.transactions.validationTitle}
             </Text>
 
-            <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+            <ScrollView style={{ flexGrow: 0, flexShrink: 1 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
               {/* Services */}
               {services.length > 0 && (
                 <>

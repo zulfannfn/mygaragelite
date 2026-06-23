@@ -1817,7 +1817,7 @@ export default function TransactionDetail() {
       {confirmPaidModal && (
         <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}>
         <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
           style={{ flex: 1 }}
         >
           <Pressable
@@ -1838,6 +1838,7 @@ export default function TransactionDetail() {
                 borderWidth: 1,
                 borderColor: theme.colors.border,
                 maxHeight: '85%',
+                overflow: 'hidden',
               }}
             >
               <Text
@@ -1853,7 +1854,7 @@ export default function TransactionDetail() {
               </Text>
 
               <ScrollView
-                style={{ flex: 1 }}
+                style={{ flexGrow: 0, flexShrink: 1 }}
                 keyboardShouldPersistTaps="handled"
                 showsVerticalScrollIndicator={false}
               >
